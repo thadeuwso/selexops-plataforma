@@ -1,0 +1,17 @@
+[project]
+name = "selx-workers"
+version = "0.1.0"
+description = "SelX 2.0 — Workers assíncronos (Celery): filas, integrações, e-mail, cálculos em lote."
+requires-python = ">=3.12"
+dependencies = [
+    "celery[redis]>=5.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.7",
+]
+
+[tool.ruff]
+line-length = 100

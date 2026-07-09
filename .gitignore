@@ -1,0 +1,25 @@
+# Dependências
+node_modules/
+.pnpm-store/
+__pycache__/
+.venv/
+*.pyc
+
+# Builds
+dist/
+.next/
+.turbo/
+out/
+
+# Ambiente — segredos NUNCA no repositório (FOUNDATION §6.5)
+.env
+.env.*
+!.env.example
+
+# Prisma
+packages/database/generated/
+
+# Sistema / IDE
+.DS_Store
+Thumbs.db
+*.log

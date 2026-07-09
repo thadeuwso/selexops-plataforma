@@ -1,0 +1,21 @@
+// SelX 2.0 — schema Prisma
+//
+// REGRAS (decisões imutáveis do FOUNDATION + ADRs 0002/0004):
+// 1. Nenhum modelo entra aqui sem modelagem prévia no vault (04 - Banco/Modelo ER).
+// 2. Nomenclatura física em português, padrão ERP: @@map("TBEBEN"), @map("CODBEN").
+// 3. Toda tabela de dados de cliente tem CODTEN e ganha política RLS
+//    na MESMA migration que a cria (SQL manual dentro da migration Prisma).
+// 4. PKs BIGINT identity — nunca UUID (ADR-0004).
+// 5. Exclusão física de dado de negócio é proibida (ATIVO 'S'/'N').
+//
+// O schema está deliberadamente vazio: a primeira modelagem (módulo Core)
+// será escrita no vault e revisada antes de virar migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Dependências autorizadas a executar scripts de build no install (pnpm 11).
+# Prisma: gera engines nativas. Sharp: binários de imagem do Next.js.
+allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
+  sharp: true

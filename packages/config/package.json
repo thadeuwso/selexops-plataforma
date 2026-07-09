@@ -1,0 +1,6 @@
+{
+  "name": "@selx/config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Configurações compartilhadas do monorepo (tsconfig base, futuras configs de lint/format)"
+}
