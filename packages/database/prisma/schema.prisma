@@ -1,15 +1,10 @@
-// SelX 2.0 — schema Prisma
+// SelX 2.0 — schema Prisma (Core v1)
 //
-// REGRAS (decisões imutáveis do FOUNDATION + ADRs 0002/0004):
-// 1. Nenhum modelo entra aqui sem modelagem prévia no vault (04 - Banco/Modelo ER).
-// 2. Nomenclatura física em português, padrão ERP: @@map("TBEBEN"), @map("CODBEN").
-// 3. Toda tabela de dados de cliente tem CODTEN e ganha política RLS
-//    na MESMA migration que a cria (SQL manual dentro da migration Prisma).
-// 4. PKs BIGINT identity — nunca UUID (ADR-0004).
-// 5. Exclusão física de dado de negócio é proibida (ATIVO 'S'/'N').
-//
-// O schema está deliberadamente vazio: a primeira modelagem (módulo Core)
-// será escrita no vault e revisada antes de virar migration.
+// Fonte da modelagem: vault "04 - Banco/Modelo ER/Core.md" (validada em 2026-07-09).
+// Convenções: ADR-0002 (RLS), ADR-0004 (nomes português/padrão Sankhya, PKs BIGINT).
+// Nomes físicos via @@map/@map — entidades existentes no Sankhya usam o nome real
+// (TSIEMP, TSIUSU, TFPFUN, TFPCAR, TSICUS); exclusivas do SelX usam famílias próprias (TSX*, TAU*).
+// Políticas RLS vivem no SQL da migration que cria as tabelas (não são geridas pelo Prisma).
 
 generator client {
   provider = "prisma-client-js"
@@ -18,4 +13,300 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ===== Plataforma =====
+
+/// Tenant (grupo econômico). Tabela GLOBAL — raiz do multi-tenant, sem RLS comum.
+model Tenant {
+  codTen    BigInt   @id @default(autoincrement()) @map("CODTEN")
+  nomeTen   String   @map("NOMETEN")
+  situacao  String   @default("ATIVO") @map("SITUACAO")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+  codUsuAlt BigInt?  @map("CODUSUALT")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  empresas       Empresa[]
+  usuarios       Usuario[]
+  funcionarios   Funcionario[]
+  cargos         Cargo[]
+  centros        CentroResultado[]
+  papeis         Papel[]
+  papelPerms     PapelPermissao[]
+  usuarioPapeis  UsuarioPapel[]
+  funcHistoricos FuncionarioHistorico[]
+  dependentes    Dependente[]
+  logsAuditoria  LogAuditoria[]
+
+  @@map("TSXTEN")
+}
+
+// ===== Organização (nomes reais do Sankhya) =====
+
+/// Empresas E filiais na mesma tabela, como no Sankhya. Filial aponta a matriz via codEmpMatriz.
+model Empresa {
+  codEmp        BigInt   @id @default(autoincrement()) @map("CODEMP")
+  codTen        BigInt   @map("CODTEN")
+  codEmpMatriz  BigInt?  @map("CODEMPMATRIZ")
+  nomeFantasia  String   @map("NOMEFANTASIA")
+  razaoSocial   String   @map("RAZAOSOCIAL")
+  cgc           String?  @map("CGC")
+  codEmpErp     BigInt?  @map("CODEMPERP")
+  situacao      String   @default("ATIVA") @map("SITUACAO")
+  dhInc         DateTime @default(now()) @map("DHINC")
+  codUsuInc     BigInt?  @map("CODUSUINC")
+  dhAlt         DateTime @updatedAt @map("DHALT")
+  codUsuAlt     BigInt?  @map("CODUSUALT")
+  ativo         String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant        Tenant    @relation(fields: [codTen], references: [codTen])
+  matriz        Empresa?  @relation("MatrizFilial", fields: [codEmpMatriz], references: [codEmp])
+  filiais       Empresa[] @relation("MatrizFilial")
+  funcionarios  Funcionario[]
+  centros       CentroResultado[]
+  usuarioPapeis UsuarioPapel[]
+
+  @@index([codTen])
+  @@index([codEmpMatriz])
+  @@map("TSIEMP")
+}
+
+/// Cargos (nome real do Sankhya, confirmado pelo Thadeu).
+model Cargo {
+  codCar    BigInt   @id @default(autoincrement()) @map("CODCAR")
+  codTen    BigInt   @map("CODTEN")
+  nomeCar   String   @map("NOMECAR")
+  cbo       String?  @map("CBO")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+  codUsuAlt BigInt?  @map("CODUSUALT")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant        @relation(fields: [codTen], references: [codTen])
+  funcionarios Funcionario[]
+
+  @@unique([codTen, nomeCar])
+  @@map("TFPCAR")
+}
+
+/// Centros de resultado (nome real do Sankhya, confirmado pelo Thadeu). Hierárquico; só analítico recebe lançamento.
+model CentroResultado {
+  codCencus     BigInt   @id @default(autoincrement()) @map("CODCENCUS")
+  codTen        BigInt   @map("CODTEN")
+  codEmp        BigInt?  @map("CODEMP")
+  descrCencus   String   @map("DESCRCENCUS")
+  codCencusPai  BigInt?  @map("CODCENCUSPAI")
+  analitico     String   @default("S") @map("ANALITICO") @db.Char(1)
+  codCencusErp  BigInt?  @map("CODCENCUSERP")
+  dhInc         DateTime @default(now()) @map("DHINC")
+  codUsuInc     BigInt?  @map("CODUSUINC")
+  dhAlt         DateTime @updatedAt @map("DHALT")
+  codUsuAlt     BigInt?  @map("CODUSUALT")
+  ativo         String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant            @relation(fields: [codTen], references: [codTen])
+  empresa      Empresa?          @relation(fields: [codEmp], references: [codEmp])
+  pai          CentroResultado?  @relation("HierarquiaCencus", fields: [codCencusPai], references: [codCencus])
+  filhos       CentroResultado[] @relation("HierarquiaCencus")
+  funcionarios Funcionario[]
+
+  @@index([codTen])
+  @@map("TSICUS")
+}
+
+// ===== Pessoas (nomes reais do Sankhya) =====
+
+/// Funcionários. NUMCAD = matrícula, como no Sankhya. TFPFUNHIS registra os eventos de vida.
+model Funcionario {
+  codFun       BigInt    @id @default(autoincrement()) @map("CODFUN")
+  codTen       BigInt    @map("CODTEN")
+  codEmp       BigInt    @map("CODEMP")
+  numCad       BigInt    @map("NUMCAD")
+  nomeFun      String    @map("NOMEFUN")
+  cgc          String?   @map("CGC")
+  dtNasc       DateTime? @map("DTNASC") @db.Date
+  dtAdm        DateTime  @map("DTADM") @db.Date
+  dtDem        DateTime? @map("DTDEM") @db.Date
+  codCar       BigInt?   @map("CODCAR")
+  codCencus    BigInt?   @map("CODCENCUS")
+  tipoContrato String    @default("CLT") @map("TIPOCONTRATO")
+  vlrSal       Decimal?  @map("VLRSAL") @db.Decimal(15, 2)
+  situacao     String    @default("ATIVO") @map("SITUACAO")
+  codFunErp    BigInt?   @map("CODFUNERP")
+  dhInc        DateTime  @default(now()) @map("DHINC")
+  codUsuInc    BigInt?   @map("CODUSUINC")
+  dhAlt        DateTime  @updatedAt @map("DHALT")
+  codUsuAlt    BigInt?   @map("CODUSUALT")
+  ativo        String    @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant          Tenant                 @relation(fields: [codTen], references: [codTen])
+  empresa         Empresa                @relation(fields: [codEmp], references: [codEmp])
+  cargo           Cargo?                 @relation(fields: [codCar], references: [codCar])
+  centroResultado CentroResultado?       @relation(fields: [codCencus], references: [codCencus])
+  usuario         Usuario?
+  historicos      FuncionarioHistorico[]
+  dependentes     Dependente[]
+
+  @@unique([codTen, codEmp, numCad])
+  @@index([codTen])
+  @@index([codEmp])
+  @@map("TFPFUN")
+}
+
+/// Histórico de mudanças do funcionário — fonte dos "eventos de vida" consumidos pelos módulos.
+model FuncionarioHistorico {
+  codFunHis BigInt   @id @default(autoincrement()) @map("CODFUNHIS")
+  codTen    BigInt   @map("CODTEN")
+  codFun    BigInt   @map("CODFUN")
+  tipoMud   String   @map("TIPOMUD")
+  valorAnt  String?  @map("VALORANT")
+  valorNovo String?  @map("VALORNOVO")
+  dtMud     DateTime @map("DTMUD") @db.Date
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario @relation(fields: [codFun], references: [codFun])
+
+  @@index([codTen, codFun])
+  @@map("TFPFUNHIS")
+}
+
+/// Dependentes do funcionário. ⚠️ Nome provisório — confirmar tabela padrão da folha Sankhya.
+model Dependente {
+  codDep    BigInt    @id @default(autoincrement()) @map("CODDEP")
+  codTen    BigInt    @map("CODTEN")
+  codFun    BigInt    @map("CODFUN")
+  nomeDep   String    @map("NOMEDEP")
+  tipoDep   String    @map("TIPODEP")
+  dtNasc    DateTime? @map("DTNASC") @db.Date
+  cgc       String?   @map("CGC")
+  dhInc     DateTime  @default(now()) @map("DHINC")
+  codUsuInc BigInt?   @map("CODUSUINC")
+  dhAlt     DateTime  @updatedAt @map("DHALT")
+  codUsuAlt BigInt?   @map("CODUSUALT")
+  ativo     String    @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario @relation(fields: [codFun], references: [codFun])
+
+  @@index([codTen, codFun])
+  @@map("TFPDEP")
+}
+
+// ===== Acesso (TSIUSU espelha Sankhya; RBAC é exclusivo do SelX — família TSX) =====
+
+model Usuario {
+  codUsu      BigInt    @id @default(autoincrement()) @map("CODUSU")
+  codTen      BigInt    @map("CODTEN")
+  nomeUsu     String    @map("NOMEUSU")
+  email       String    @map("EMAIL")
+  senha       String    @map("SENHA")
+  codFun      BigInt?   @unique @map("CODFUN")
+  situacao    String    @default("ATIVO") @map("SITUACAO")
+  dhUltAcesso DateTime? @map("DHULTACESSO")
+  dhInc       DateTime  @default(now()) @map("DHINC")
+  codUsuInc   BigInt?   @map("CODUSUINC")
+  dhAlt       DateTime  @updatedAt @map("DHALT")
+  codUsuAlt   BigInt?   @map("CODUSUALT")
+  ativo       String    @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant      Tenant         @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario?   @relation(fields: [codFun], references: [codFun])
+  papeis      UsuarioPapel[]
+
+  @@unique([codTen, email])
+  @@map("TSIUSU")
+}
+
+model Papel {
+  codPap    BigInt   @id @default(autoincrement()) @map("CODPAP")
+  codTen    BigInt   @map("CODTEN")
+  nomePap   String   @map("NOMEPAP")
+  descrPap  String?  @map("DESCRPAP")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+  codUsuAlt BigInt?  @map("CODUSUALT")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant      Tenant           @relation(fields: [codTen], references: [codTen])
+  permissoes  PapelPermissao[]
+  atribuicoes UsuarioPapel[]
+
+  @@unique([codTen, nomePap])
+  @@map("TSXPAP")
+}
+
+/// Catálogo de permissões. Tabela GLOBAL (sem tenant) — semeada pela plataforma.
+model Permissao {
+  codPerm   BigInt   @id @default(autoincrement()) @map("CODPERM")
+  chavePerm String   @unique @map("CHAVEPERM")
+  descrPerm String   @map("DESCRPERM")
+  dhInc     DateTime @default(now()) @map("DHINC")
+
+  papeis PapelPermissao[]
+
+  @@map("TSXPERM")
+}
+
+model PapelPermissao {
+  codPapPerm BigInt   @id @default(autoincrement()) @map("CODPAPPERM")
+  codTen     BigInt   @map("CODTEN")
+  codPap     BigInt   @map("CODPAP")
+  codPerm    BigInt   @map("CODPERM")
+  dhInc      DateTime @default(now()) @map("DHINC")
+  codUsuInc  BigInt?  @map("CODUSUINC")
+
+  tenant    Tenant    @relation(fields: [codTen], references: [codTen])
+  papel     Papel     @relation(fields: [codPap], references: [codPap])
+  permissao Permissao @relation(fields: [codPerm], references: [codPerm])
+
+  @@unique([codPap, codPerm])
+  @@index([codTen])
+  @@map("TSXPAPPERM")
+}
+
+/// Usuário × papel com escopo opcional por empresa (ABAC). codEmp nulo = tenant inteiro.
+model UsuarioPapel {
+  codUsuPap BigInt   @id @default(autoincrement()) @map("CODUSUPAP")
+  codTen    BigInt   @map("CODTEN")
+  codUsu    BigInt   @map("CODUSU")
+  codPap    BigInt   @map("CODPAP")
+  codEmp    BigInt?  @map("CODEMP")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant  Tenant   @relation(fields: [codTen], references: [codTen])
+  usuario Usuario  @relation(fields: [codUsu], references: [codUsu])
+  papel   Papel    @relation(fields: [codPap], references: [codPap])
+  empresa Empresa? @relation(fields: [codEmp], references: [codEmp])
+
+  @@index([codTen, codUsu])
+  @@map("TSXUSUPAP")
+}
+
+// ===== Auditoria universal da plataforma =====
+
+model LogAuditoria {
+  codAud     BigInt   @id @default(autoincrement()) @map("CODAUD")
+  codTen     BigInt   @map("CODTEN")
+  nomeTab    String   @map("NOMETAB")
+  codReg     BigInt   @map("CODREG")
+  operacao   String   @map("OPERACAO")
+  dadosAnt   Json?    @map("DADOSANT")
+  dadosNovos Json?    @map("DADOSNOVOS")
+  motivo     String?  @map("MOTIVO")
+  origem     String   @map("ORIGEM")
+  dhAlt      DateTime @default(now()) @map("DHALT")
+  codUsuAlt  BigInt?  @map("CODUSUALT")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+
+  @@index([codTen, nomeTab, codReg])
+  @@map("TAULOG")
 }

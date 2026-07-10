@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: selx_dev # somente desenvolvimento local
       POSTGRES_DB: selx
     ports:
-      - "5432:5432"
+      - "5433:5432" # 5433 no host: a máquina de dev pode ter um PostgreSQL nativo na 5432
     volumes:
       - selx-pgdata:/var/lib/postgresql/data
     healthcheck:

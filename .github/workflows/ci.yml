@@ -32,6 +32,43 @@ jobs:
         env:
           DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
 
+  rls:
+    name: RLS — isolamento multi-tenant (gate ADR-0002)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: selx
+          POSTGRES_PASSWORD: selx_dev
+          POSTGRES_DB: selx
+        ports:
+          - "5433:5432"
+        options: >-
+          --health-cmd "pg_isready -U selx"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: "postgresql://selx:selx_dev@localhost:5433/selx"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Aplicar migrations
+        run: pnpm --filter @selx/database db:deploy
+
+      - name: Provar isolamento entre tenants
+        run: pnpm --filter @selx/database test:rls
+
   python:
     name: Python (ai-service, workers)
     runs-on: ubuntu-latest
