@@ -70,8 +70,11 @@ def gerar(req: RequisicaoGerar) -> dict:
         "\n".join(m["conteudo"] for m in mensagens).encode()
     ).hexdigest()
 
-    # 4. Roteamento — v1: nenhum adapter configurado => estado de primeira classe
+    # 4. Roteamento por política (ADR-0003): dado SENSÍVEL nunca sai da máquina —
+    # vai para o modelo local (Ollama), independentemente do provedor padrão.
     provedor = (os.environ.get("AI_PROVIDER") or "").strip().lower()
+    if req.sensibilidade == "sensivel":
+        provedor = "ollama"
     if not provedor or provedor == "disabled":
         raise HTTPException(
             503,
@@ -81,6 +84,43 @@ def gerar(req: RequisicaoGerar) -> dict:
                 "correlation_id": correlation_id,
             },
         )
+
+    # 5a. Adapter Ollama (modelos locais — Qwen/Llama/Mistral; dados sensíveis)
+    if provedor == "ollama":
+        base = (os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
+        modelo_local = (os.environ.get("OLLAMA_MODEL") or "qwen2.5-coder:7b").strip()
+        try:
+            resp = httpx.post(
+                f"{base}/api/chat",
+                json={
+                    "model": modelo_local,
+                    "stream": False,
+                    "options": {"num_predict": req.orcamento_tokens},
+                    "messages": [
+                        {"role": m["papel"], "content": m["conteudo"]} for m in mensagens
+                    ],
+                },
+                timeout=180,
+            )
+        except httpx.HTTPError as erro:
+            raise HTTPException(
+                503,
+                {"codigo": "PROVEDOR_INDISPONIVEL", "mensagem": f"Ollama inacessível: {erro}", "correlation_id": correlation_id},
+            ) from erro
+        if resp.status_code != 200:
+            raise HTTPException(502, {"codigo": "PROVEDOR_ERRO", "detalhe": resp.text[:300], "correlation_id": correlation_id})
+        dados = resp.json()
+        conteudo = dados["message"]["content"]
+        return {
+            "conteudo": conteudo,
+            "provedor": "ollama",
+            "modelo": modelo_local,
+            "uso": {"prompt_tokens": dados.get("prompt_eval_count"), "completion_tokens": dados.get("eval_count")},
+            "latencia_ms": int((time.monotonic() - inicio) * 1000),
+            "hash_entrada": hash_entrada,
+            "hash_saida": hashlib.sha256(conteudo.encode()).hexdigest(),
+            "correlation_id": correlation_id,
+        }
 
     if provedor != "openai":
         raise HTTPException(
