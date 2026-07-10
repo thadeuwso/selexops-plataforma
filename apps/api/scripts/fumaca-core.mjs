@@ -218,6 +218,51 @@ const loginNovaSenha = await http("POST", "/auth/login", {
 });
 verificar("login com a senha nova funciona", !!loginNovaSenha.json?.accessToken);
 
+// 10. Funcionários, cargos e departamentos
+const cargo = await http("POST", "/cargos", { nomeCar: "Analista de RH" }, tokenA2);
+verificar("cria cargo (201)", cargo.status === 201);
+
+const depPai = await http("POST", "/departamentos", { descrDep: "Recursos Humanos" }, tokenA2);
+verificar("cria departamento raiz (grau 1)", depPai.status === 201 && depPai.json?.grau === 1);
+
+const depFilho = await http(
+  "POST",
+  "/departamentos",
+  { descrDep: "Recrutamento", codDepPai: depPai.json?.codDep },
+  tokenA2,
+);
+verificar("departamento filho herda hierarquia (grau 2)", depFilho.status === 201 && depFilho.json?.grau === 2);
+
+const fun = await http(
+  "POST",
+  "/funcionarios",
+  {
+    codEmp: cadA.json?.codEmp,
+    numCad: 1001,
+    nomeFun: "Maria Silva",
+    dtAdm: "2026-07-01",
+    codCar: cargo.json?.codCar,
+    codDep: depFilho.json?.codDep,
+    vlrSal: 4500.5,
+  },
+  tokenA2,
+);
+verificar("admissão de funcionário (201)", fun.status === 201 && !!fun.json?.codFun);
+
+const funDup = await http(
+  "POST",
+  "/funcionarios",
+  { codEmp: cadA.json?.codEmp, numCad: 1001, nomeFun: "Duplicada", dtAdm: "2026-07-01" },
+  tokenA2,
+);
+verificar("NUMCAD duplicado na mesma empresa é rejeitado", funDup.status >= 400);
+
+const hist = await http("GET", `/funcionarios/${fun.json?.codFun}/historico`, null, tokenA2);
+verificar("histórico registra ADMISSAO", hist.status === 200 && hist.json?.[0]?.tipoMud === "ADMISSAO");
+
+const funB = await http("GET", "/funcionarios", null, tokenB);
+verificar("tenant B não vê funcionários do A (isolamento)", funB.status === 200 && funB.json?.length === 0);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

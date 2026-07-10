@@ -38,6 +38,7 @@ model Tenant {
   usuarioPapeis  UsuarioPapel[]
   funcHistoricos FuncionarioHistorico[]
   dependentes    Dependente[]
+  departamentos  Departamento[]
   logsAuditoria  LogAuditoria[]
   sessoes        Sessao[]
 
@@ -133,6 +134,7 @@ model Funcionario {
   dtDem        DateTime? @map("DTDEM") @db.Date
   codCar       BigInt?   @map("CODCAR")
   codCencus    BigInt?   @map("CODCENCUS")
+  codDep       BigInt?   @map("CODDEP")
   tipoContrato String    @default("CLT") @map("TIPOCONTRATO")
   vlrSal       Decimal?  @map("VLRSAL") @db.Decimal(15, 2)
   situacao     String    @default("ATIVO") @map("SITUACAO")
@@ -147,6 +149,7 @@ model Funcionario {
   empresa         Empresa                @relation(fields: [codEmp], references: [codEmp])
   cargo           Cargo?                 @relation(fields: [codCar], references: [codCar])
   centroResultado CentroResultado?       @relation(fields: [codCencus], references: [codCencus])
+  departamento    Departamento?          @relation(fields: [codDep], references: [codDep])
   usuario         Usuario?
   historicos      FuncionarioHistorico[]
   dependentes     Dependente[]
@@ -329,4 +332,29 @@ model Sessao {
 
   @@index([codTen, codUsu])
   @@map("TSXSES")
+}
+
+/// Departamentos (nome real do Sankhya). Hierárquico; ANALITICO = recebe lotação.
+model Departamento {
+  codDep    BigInt   @id @default(autoincrement()) @map("CODDEP")
+  codTen    BigInt   @map("CODTEN")
+  descrDep  String   @map("DESCRDEP")
+  codDepPai BigInt?  @map("CODDEPPAI")
+  grau      Int      @default(1) @map("GRAU")
+  analitico String   @default("S") @map("ANALITICO") @db.Char(1)
+  codCencus BigInt?  @map("CODCENCUS")
+  codDepErp BigInt?  @map("CODDEPERP")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+  codUsuAlt BigInt?  @map("CODUSUALT")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant         @relation(fields: [codTen], references: [codTen])
+  pai          Departamento?  @relation("HierarquiaDep", fields: [codDepPai], references: [codDep])
+  filhos       Departamento[] @relation("HierarquiaDep")
+  funcionarios Funcionario[]
+
+  @@index([codTen])
+  @@map("TFPDEP")
 }
