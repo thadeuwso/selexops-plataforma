@@ -285,6 +285,46 @@ verificar("lista dependentes (1)", deps.status === 200 && deps.json?.length === 
 const projB = await http("GET", "/projetos", null, tokenB);
 verificar("tenant B não vê projetos do A", projB.status === 200 && projB.json?.length === 0);
 
+// 12. Recrutamento: vagas com ciclo de aprovação
+const vaga = await http(
+  "POST",
+  "/vagas",
+  {
+    codEmp: cadA.json?.codEmp,
+    titulo: "Analista de Benefícios Pleno",
+    senioridade: "PLENO",
+    modeloTrab: "HIBRIDO",
+    vlrSalMin: 4000,
+    vlrSalMax: 6000,
+    codCar: cargo.json?.codCar,
+    codDep: depFilho.json?.codDep,
+    requisitos: [
+      { descrReq: "Experiência com Sankhya", tipoReq: "OBRIGATORIO", knockout: "S" },
+      { descrReq: "Inglês intermediário", tipoReq: "DESEJAVEL" },
+    ],
+  },
+  tokenA2,
+);
+verificar("cria vaga em RASCUNHO (201)", vaga.status === 201 && vaga.json?.status === "RASCUNHO");
+
+const aprovarCedo = await http("PATCH", `/vagas/${vaga.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+verificar("aprovar RASCUNHO é transição inválida → 400", aprovarCedo.status === 400);
+
+const enviar = await http("PATCH", `/vagas/${vaga.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+verificar("envia para aprovação", enviar.status === 200 && enviar.json?.status === "EM_APROVACAO");
+
+const aprovar = await http("PATCH", `/vagas/${vaga.json?.codVag}/status`, { acao: "aprovar", observacao: "ok" }, tokenA2);
+verificar("aprova → ABERTA", aprovar.status === 200 && aprovar.json?.status === "ABERTA");
+
+const detalhe = await http("GET", `/vagas/${vaga.json?.codVag}`, null, tokenA2);
+verificar(
+  "detalhe traz requisitos tipados e knockout",
+  detalhe.status === 200 && detalhe.json?.requisitos?.length === 2 && detalhe.json.requisitos[0].knockout === "S",
+);
+
+const vagasB = await http("GET", "/vagas", null, tokenB);
+verificar("tenant B não vê vagas do A (isolamento)", vagasB.status === 200 && vagasB.json?.length === 0);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

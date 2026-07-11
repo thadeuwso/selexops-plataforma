@@ -43,6 +43,17 @@ model Tenant {
   contratosServico ContratoServico[]
   logsAuditoria  LogAuditoria[]
   sessoes        Sessao[]
+  vagas          Vaga[]
+  vagaRequisitos VagaRequisito[]
+  vagaPerguntas  VagaPergunta[]
+  canais         Canal[]
+  vagaCanais     VagaCanal[]
+  candidatos     Candidato[]
+  candCurriculos CandidatoCurriculo[]
+  candidaturas   Candidatura[]
+  cdtHistoricos  CandidaturaHistorico[]
+  estagioConfigs EstagioConfig[]
+  matchResumos   MatchResumo[]
 
   @@map("TSXTEN")
 }
@@ -71,6 +82,7 @@ model Empresa {
   funcionarios  Funcionario[]
   centros       CentroResultado[]
   usuarioPapeis UsuarioPapel[]
+  vagas         Vaga[]
 
   @@index([codTen])
   @@index([codEmpMatriz])
@@ -91,6 +103,7 @@ model Cargo {
 
   tenant       Tenant        @relation(fields: [codTen], references: [codTen])
   funcionarios Funcionario[]
+  vagas        Vaga[]
 
   @@unique([codTen, nomeCar])
   @@map("TFPCAR")
@@ -360,6 +373,7 @@ model Departamento {
   pai          Departamento?  @relation("HierarquiaDep", fields: [codDepPai], references: [codDep])
   filhos       Departamento[] @relation("HierarquiaDep")
   funcionarios Funcionario[]
+  vagas        Vaga[]
 
   @@index([codTen])
   @@map("TFPDEP")
@@ -423,4 +437,259 @@ model ContratoServico {
 
   @@index([codTen])
   @@map("TCSCON")
+}
+
+// ===== Recrutamento (família TRE — modelo aprovado pelo Thadeu em 2026-07-11) =====
+
+/// Vaga com ciclo de aprovação (herdado do 1.0 em produção).
+model Vaga {
+  codVag        BigInt    @id @default(autoincrement()) @map("CODVAG")
+  codTen        BigInt    @map("CODTEN")
+  codEmp        BigInt    @map("CODEMP")
+  titulo        String    @map("TITULO")
+  descrVag      String?   @map("DESCRVAG")
+  local         String?   @map("LOCAL")
+  senioridade   String?   @map("SENIORIDADE")
+  status        String    @default("RASCUNHO") @map("STATUS")
+  urgente       String    @default("N") @map("URGENTE") @db.Char(1)
+  dhPub         DateTime? @map("DHPUB")
+  codUsuAprov   BigInt?   @map("CODUSUAPROV")
+  dhAprov       DateTime? @map("DHAPROV")
+  obsAprov      String?   @map("OBSAPROV")
+  motivoCancel  String?   @map("MOTIVOCANCEL")
+  codCandContratado BigInt? @map("CODCANDCONTRATADO")
+  vlrSalMin     Decimal?  @map("VLRSALMIN") @db.Decimal(15, 2)
+  vlrSalMax     Decimal?  @map("VLRSALMAX") @db.Decimal(15, 2)
+  salaVista     String    @default("N") @map("SALAVISTA") @db.Char(1)
+  modeloTrab    String?   @map("MODELOTRAB")
+  tipoContrato  String?   @map("TIPOCONTRATO")
+  codDep        BigInt?   @map("CODDEP")
+  codCar        BigInt?   @map("CODCAR")
+  dhInc         DateTime  @default(now()) @map("DHINC")
+  codUsuInc     BigInt?   @map("CODUSUINC")
+  dhAlt         DateTime  @updatedAt @map("DHALT")
+  codUsuAlt     BigInt?   @map("CODUSUALT")
+  ativo         String    @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant        @relation(fields: [codTen], references: [codTen])
+  empresa      Empresa       @relation(fields: [codEmp], references: [codEmp])
+  departamento Departamento? @relation(fields: [codDep], references: [codDep])
+  cargo        Cargo?        @relation(fields: [codCar], references: [codCar])
+  requisitos   VagaRequisito[]
+  perguntas    VagaPergunta[]
+  canais       VagaCanal[]
+  candidaturas Candidatura[]
+
+  @@index([codTen, status])
+  @@map("TREVAG")
+}
+
+model VagaRequisito {
+  codVagReq BigInt   @id @default(autoincrement()) @map("CODVAGREQ")
+  codTen    BigInt   @map("CODTEN")
+  codVag    BigInt   @map("CODVAG")
+  descrReq  String   @map("DESCRREQ")
+  tipoReq   String   @default("OBRIGATORIO") @map("TIPOREQ")
+  knockout  String   @default("N") @map("KNOCKOUT") @db.Char(1)
+  ordem     Int      @default(1) @map("ORDEM")
+  dhInc     DateTime @default(now()) @map("DHINC")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+  vaga   Vaga   @relation(fields: [codVag], references: [codVag])
+
+  @@index([codTen, codVag])
+  @@map("TREVAGREQ")
+}
+
+model VagaPergunta {
+  codVagPer   BigInt   @id @default(autoincrement()) @map("CODVAGPER")
+  codTen      BigInt   @map("CODTEN")
+  codVag      BigInt   @map("CODVAG")
+  pergunta    String   @map("PERGUNTA")
+  tipoResp    String   @default("SIM_NAO") @map("TIPORESP")
+  obrigatoria String   @default("S") @map("OBRIGATORIA") @db.Char(1)
+  respElimina String?  @map("RESPELIMINA")
+  ordem       Int      @default(1) @map("ORDEM")
+  dhInc       DateTime @default(now()) @map("DHINC")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+  vaga   Vaga   @relation(fields: [codVag], references: [codVag])
+
+  @@index([codTen, codVag])
+  @@map("TREVAGPER")
+}
+
+/// Canal de captação (vagas.com, Catho, Empregare, indicação, importação, manual...).
+model Canal {
+  codCanal    BigInt   @id @default(autoincrement()) @map("CODCANAL")
+  codTen      BigInt   @map("CODTEN")
+  nomeCanal   String   @map("NOMECANAL")
+  tipoCanal   String   @default("manual") @map("TIPOCANAL")
+  vlrCustoMes Decimal? @map("VLRCUSTOMES") @db.Decimal(15, 2)
+  dhInc       DateTime @default(now()) @map("DHINC")
+  codUsuInc   BigInt?  @map("CODUSUINC")
+  dhAlt       DateTime @updatedAt @map("DHALT")
+  codUsuAlt   BigInt?  @map("CODUSUALT")
+  ativo       String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant        @relation(fields: [codTen], references: [codTen])
+  publicacoes  VagaCanal[]
+  candidaturas Candidatura[]
+
+  @@unique([codTen, nomeCanal])
+  @@map("TRECANAL")
+}
+
+model VagaCanal {
+  codVagCanal BigInt    @id @default(autoincrement()) @map("CODVAGCANAL")
+  codTen      BigInt    @map("CODTEN")
+  codVag      BigInt    @map("CODVAG")
+  codCanal    BigInt    @map("CODCANAL")
+  idExterno   String?   @map("IDEXTERNO")
+  urlExterna  String?   @map("URLEXTERNA")
+  dhPub       DateTime? @map("DHPUB")
+  status      String    @default("PUBLICADA") @map("STATUS")
+  dhInc       DateTime  @default(now()) @map("DHINC")
+  codUsuInc   BigInt?   @map("CODUSUINC")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+  vaga   Vaga   @relation(fields: [codVag], references: [codVag])
+  canal  Canal  @relation(fields: [codCanal], references: [codCanal])
+
+  @@index([codTen, codVag])
+  @@map("TREVAGCANAL")
+}
+
+/// Candidato — banco de talentos por TENANT, dedup por e-mail/CPF (RN-REC-009).
+model Candidato {
+  codCand   BigInt   @id @default(autoincrement()) @map("CODCAND")
+  codTen    BigInt   @map("CODTEN")
+  nomeCand  String   @map("NOMECAND")
+  email     String   @map("EMAIL")
+  fone      String?  @map("FONE")
+  cgc       String?  @map("CGC")
+  linkedin  String?  @map("LINKEDIN")
+  cidade    String?  @map("CIDADE")
+  codUsu    BigInt?  @map("CODUSU")
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+  codUsuAlt BigInt?  @map("CODUSUALT")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant       Tenant               @relation(fields: [codTen], references: [codTen])
+  curriculos   CandidatoCurriculo[]
+  candidaturas Candidatura[]
+
+  @@unique([codTen, email])
+  @@index([codTen, cgc])
+  @@map("TRECAND")
+}
+
+model CandidatoCurriculo {
+  codCandCv     BigInt   @id @default(autoincrement()) @map("CODCANDCV")
+  codTen        BigInt   @map("CODTEN")
+  codCand       BigInt   @map("CODCAND")
+  arquivo       String   @map("ARQUIVO")
+  textoExtraido String?  @map("TEXTOEXTRAIDO")
+  dhInc         DateTime @default(now()) @map("DHINC")
+
+  tenant    Tenant    @relation(fields: [codTen], references: [codTen])
+  candidato Candidato @relation(fields: [codCand], references: [codCand])
+
+  @@index([codTen, codCand])
+  @@map("TRECANDCV")
+}
+
+/// Candidatura — única por vaga+candidato; idempotência por (CODCANAL, IDEXTERNO).
+model Candidatura {
+  codCdt        BigInt   @id @default(autoincrement()) @map("CODCDT")
+  codTen        BigInt   @map("CODTEN")
+  codVag        BigInt   @map("CODVAG")
+  codCand       BigInt   @map("CODCAND")
+  estagio       String   @default("applied") @map("ESTAGIO")
+  codCanal      BigInt   @map("CODCANAL")
+  idExterno     String?  @map("IDEXTERNO")
+  respostasJson Json?    @map("RESPOSTASJSON")
+  knockoutJson  Json?    @map("KNOCKOUTJSON")
+  dhInc         DateTime @default(now()) @map("DHINC")
+  codUsuInc     BigInt?  @map("CODUSUINC")
+  dhAlt         DateTime @updatedAt @map("DHALT")
+  codUsuAlt     BigInt?  @map("CODUSUALT")
+  ativo         String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant    Tenant                 @relation(fields: [codTen], references: [codTen])
+  vaga      Vaga                   @relation(fields: [codVag], references: [codVag])
+  candidato Candidato              @relation(fields: [codCand], references: [codCand])
+  canal     Canal                  @relation(fields: [codCanal], references: [codCanal])
+  timeline  CandidaturaHistorico[]
+  match     MatchResumo?
+
+  @@unique([codVag, codCand])
+  @@index([codTen, codVag, estagio])
+  @@map("TRECDT")
+}
+
+/// Timeline/event log da candidatura — alimenta candidato, auditoria e ML.
+model CandidaturaHistorico {
+  codCdtHis     BigInt   @id @default(autoincrement()) @map("CODCDTHIS")
+  codTen        BigInt   @map("CODTEN")
+  codCdt        BigInt   @map("CODCDT")
+  tipoEvento    String   @map("TIPOEVENTO")
+  estagioAnt    String?  @map("ESTAGIOANT")
+  estagioNovo   String?  @map("ESTAGIONOVO")
+  rotuloPub     String?  @map("ROTULOPUB")
+  notaInterna   String?  @map("NOTAINTERNA")
+  tipoAtor      String   @default("usuario") @map("TIPOATOR")
+  metadadosJson Json?    @map("METADADOSJSON")
+  dhInc         DateTime @default(now()) @map("DHINC")
+  codUsuInc     BigInt?  @map("CODUSUINC")
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura @relation(fields: [codCdt], references: [codCdt])
+
+  @@index([codTen, codCdt])
+  @@map("TRECDTHIS")
+}
+
+/// Configuração de estágio do pipeline por tenant/empresa (rótulos públicos, ordem, visibilidade).
+model EstagioConfig {
+  codEtpCfg BigInt   @id @default(autoincrement()) @map("CODETPCFG")
+  codTen    BigInt   @map("CODTEN")
+  codEmp    BigInt?  @map("CODEMP")
+  estagio   String   @map("ESTAGIO")
+  ordem     Int      @map("ORDEM")
+  rotuloPub String   @map("ROTULOPUB")
+  descrPub  String?  @map("DESCRPUB")
+  visivel   String   @default("S") @map("VISIVEL") @db.Char(1)
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+  codUsuAlt BigInt?  @map("CODUSUALT")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+
+  @@unique([codTen, codEmp, estagio])
+  @@map("TREETPCFG")
+}
+
+/// Resumo de match determinístico (1:1 com a candidatura) — nunca LLM no score.
+model MatchResumo {
+  codMatch         BigInt   @id @default(autoincrement()) @map("CODMATCH")
+  codTen           BigInt   @map("CODTEN")
+  codCdt           BigInt   @unique @map("CODCDT")
+  versaoMatch      String   @map("VERSAOMATCH")
+  scoreGeral       Int      @map("SCOREGERAL")
+  scoreContratacao Int?     @map("SCORECONTRATACAO")
+  scoreCultura     Int?     @map("SCORECULTURA")
+  driverPrincipal  String?  @map("DRIVERPRINCIPAL")
+  qtdGapsCrit      Int      @default(0) @map("QTDGAPSCRIT")
+  qtdGapsMelh      Int      @default(0) @map("QTDGAPSMELH")
+  hashEntrada      String   @map("HASHENTRADA")
+  dhCalc           DateTime @default(now()) @map("DHCALC")
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  candidatura Candidatura @relation(fields: [codCdt], references: [codCdt])
+
+  @@map("TREMATCH")
 }

@@ -17,6 +17,11 @@ const permissoes = [
   ["core.funcionarios.criar", "Cadastrar funcionários"],
   ["core.funcionarios.editar", "Editar funcionários"],
   ["core.auditoria.ler", "Consultar trilha de auditoria"],
+  ["recrutamento.vagas.ler", "Ver vagas"],
+  ["recrutamento.vagas.criar", "Criar e editar vagas"],
+  ["recrutamento.vagas.aprovar", "Aprovar, rejeitar e pedir ajustes em vagas"],
+  ["recrutamento.candidatos.ler", "Ver candidatos e candidaturas"],
+  ["recrutamento.candidatos.criar", "Cadastrar/importar candidatos e mover pipeline"],
 ];
 
 for (const [chavePerm, descrPerm] of permissoes) {
