@@ -1,4 +1,4 @@
-import "./adl/styles.css";
+import "@selx/ui/adl/styles.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 

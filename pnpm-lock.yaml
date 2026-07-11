@@ -75,6 +75,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@selx/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: ^15.5.0
         version: 15.5.20(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
