@@ -325,6 +325,36 @@ verificar(
 const vagasB = await http("GET", "/vagas", null, tokenB);
 verificar("tenant B não vê vagas do A (isolamento)", vagasB.status === 200 && vagasB.json?.length === 0);
 
+// 13. Captação multi-canal: canais, dedup, idempotência, pipeline e timeline
+const canal = await http("POST", "/canais", { nomeCanal: "Catho", tipoCanal: "importacao", vlrCustoMes: 890 }, tokenA2);
+verificar("cria canal de captação (201)", canal.status === 201);
+
+const cand1 = await http("POST", "/candidatos", { nomeCand: "Ana Souza", email: `ana.${rodada}@mail.com`, cidade: "Uberlândia" }, tokenA2);
+verificar("cadastra candidato (201)", cand1.status === 201 && cand1.json?.deduplicado === false);
+
+const cand2 = await http("POST", "/candidatos", { nomeCand: "Ana S. Atualizada", email: `ana.${rodada}@mail.com`, fone: "34 99999-0000" }, tokenA2);
+verificar("mesmo e-mail → DEDUP (mesmo codCand)", cand2.status === 201 && cand2.json?.deduplicado === true && cand2.json?.codCand === cand1.json?.codCand);
+
+const cdt = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Ana S. Atualizada", email: `ana.${rodada}@mail.com` },
+  codCanal: canal.json?.codCanal,
+  idExterno: `catho-${rodada}`,
+}, tokenA2);
+verificar("candidatura em vaga ABERTA (201)", cdt.status === 201 && cdt.json?.estagio === "applied");
+
+const cdtRepetida = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Ana", email: `ana.${rodada}@mail.com` },
+  codCanal: canal.json?.codCanal,
+  idExterno: `catho-${rodada}`,
+}, tokenA2);
+verificar("reenvio mesmo canal+idExterno → idempotente", cdtRepetida.json?.idempotente === true && cdtRepetida.json?.codCdt === cdt.json?.codCdt);
+
+const mover = await http("PATCH", `/candidaturas/${cdt.json?.codCdt}/estagio`, { estagio: "screening", nota: "Currículo aderente" }, tokenA2);
+verificar("move estágio applied → screening", mover.status === 200 && mover.json?.estagio === "screening");
+
+const tl = await http("GET", `/candidaturas/${cdt.json?.codCdt}/timeline`, null, tokenA2);
+verificar("timeline registra recebimento + mudança de estágio", tl.status === 200 && tl.json?.length >= 2 && tl.json.at(-1)?.tipoEvento === "mudanca_estagio");
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);
