@@ -75,7 +75,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@selx/ui':
+      '@selexops/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       next:

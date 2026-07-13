@@ -74,7 +74,7 @@ export class AuthService {
       const permissoes = await tx.permissao.findMany();
       if (permissoes.length === 0) {
         throw new BadRequestException(
-          'Catálogo de permissões vazio — execute o seed (pnpm --filter @selx/database db:seed)',
+          'Catálogo de permissões vazio — execute o seed (pnpm --filter @selexops/database db:seed)',
         );
       }
       await tx.papelPermissao.createMany({

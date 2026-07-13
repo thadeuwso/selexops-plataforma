@@ -1,5 +1,5 @@
 {
-  "name": "@selx/ui",
+  "name": "@selexops/ui",
   "version": "0.1.0",
   "private": true,
   "description": "Implementação de referência do AION Design Language (ADL). NÃO implementar componentes antes da especificação no vault (12 - ADL) — Fase 3 do roadmap do ADL.",

@@ -12,7 +12,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
   const porta = Number(process.env.API_PORT ?? 3001);
   await app.listen(porta);
-  console.log(`SelX API ouvindo em http://localhost:${porta}`);
+  console.log(`SelexOps API ouvindo em http://localhost:${porta}`);
 }
 
 void bootstrap();

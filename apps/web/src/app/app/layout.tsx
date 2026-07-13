@@ -62,8 +62,8 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
         }}
       >
         <img
-          src="/marca/SelX_Kit_Identidade/svg/selx-logo-horizontal-fundo-escuro.svg"
-          alt="SelX"
+          src="/marca/SelexOps_Kit_Identidade/svg/selexops-logo-horizontal-fundo-escuro.svg"
+          alt="SelexOps"
           style={{ height: 34 }}
         />
         <nav style={{ display: "grid", gap: 4, fontSize: 14 }}>

@@ -1,8 +1,8 @@
 {
-  "name": "selx-plataforma",
+  "name": "selexops-plataforma",
   "version": "0.1.0",
   "private": true,
-  "description": "SelX 2.0 — Plataforma Inteligente de Gestão de Pessoas (HCM) com IA nativa",
+  "description": "SelexOps — Plataforma Inteligente de Gestão de Pessoas (HCM) com IA nativa",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",

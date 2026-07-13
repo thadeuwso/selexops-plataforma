@@ -1,9 +1,9 @@
-import "@selx/ui/adl/styles.css";
+import "@selexops/ui/adl/styles.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "SelX 2.0",
+  title: "SelexOps",
   description: "Plataforma Inteligente de Gestão de Pessoas",
 };
 

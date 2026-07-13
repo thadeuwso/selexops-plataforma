@@ -1,4 +1,4 @@
-"""SelX 2.0 — ai-service.
+"""SelexOps — ai-service.
 
 Casa do AI Gateway (ADR-0003). Regras que este serviço fará valer:
 - ponto único de chamada a provedores de LLM (adapters);
@@ -14,7 +14,7 @@ from fastapi import FastAPI
 
 from app.gateway import router as gateway_router
 
-app = FastAPI(title="SelX AI Service", version="0.1.0")
+app = FastAPI(title="SelexOps AI Service", version="0.1.0")
 app.include_router(gateway_router)
 
 
@@ -22,6 +22,6 @@ app.include_router(gateway_router)
 def verificar_saude() -> dict:
     return {
         "ok": True,
-        "servico": "selx-ai-service",
+        "servico": "selexops-ai-service",
         "dataHora": datetime.now(timezone.utc).isoformat(),
     }

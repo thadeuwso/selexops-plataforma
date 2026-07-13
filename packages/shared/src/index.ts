@@ -1,5 +1,5 @@
 /**
- * @selx/shared — tipos, DTOs e contratos compartilhados entre apps.
+ * @selexops/shared — tipos, DTOs e contratos compartilhados entre apps.
  *
  * Regra: contratos entre módulos e com o AI Gateway (ADR-0003) nascem aqui,
  * documentados no vault (05 - Backend/APIs e 05 - Backend/Eventos) antes de usados.

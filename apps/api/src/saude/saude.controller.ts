@@ -6,6 +6,6 @@ export class SaudeController {
   @Publico()
   @Get()
   verificar() {
-    return { ok: true, servico: 'selx-api', dataHora: new Date().toISOString() };
+    return { ok: true, servico: 'selexops-api', dataHora: new Date().toISOString() };
   }
 }

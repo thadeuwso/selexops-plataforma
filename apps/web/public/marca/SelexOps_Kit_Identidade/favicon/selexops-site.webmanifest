@@ -1,0 +1,11 @@
+{
+  "name": "SelexOps",
+  "short_name": "SelexOps",
+  "icons": [
+    {"src": "selexops-android-chrome-192x192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "selexops-android-chrome-512x512.png", "sizes": "512x512", "type": "image/png"}
+  ],
+  "theme_color": "#2B1D15",
+  "background_color": "#F7F2E8",
+  "display": "standalone"
+}
