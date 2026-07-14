@@ -1,8 +1,8 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
-import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
+import { PrismaService } from '../compartilhado/prisma/prisma.service';
 
 const esquemaVaga = z.object({
   codEmp: z.coerce.bigint(),

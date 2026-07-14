@@ -6,4 +6,4 @@ import { VagasController } from './vagas.controller';
 @Module({
   controllers: [VagasController, CandidatosController, IaVagasController],
 })
-export class VagasModule {}
+export class RecrutamentoModule {}

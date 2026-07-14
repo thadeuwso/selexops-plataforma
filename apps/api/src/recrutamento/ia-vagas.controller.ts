@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Post, Req, ServiceUnavailableException } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
-import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
+import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 
 /**
  * Estruturação de vaga com IA — herda a experiência do SelX 1.0 (prompt de

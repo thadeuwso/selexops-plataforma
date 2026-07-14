@@ -1,9 +1,9 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
-import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
+import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import type { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../compartilhado/prisma/prisma.service';
 
 export const ESTAGIOS = [
   'applied', 'screening', 'analysis', 'knockout', 'shortlist', 'interview',

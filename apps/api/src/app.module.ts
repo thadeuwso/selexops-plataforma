@@ -1,28 +1,32 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AuthModule } from './auth/auth.module';
-import { EmpresasModule } from './empresas/empresas.module';
-import { FuncionariosModule } from './funcionarios/funcionarios.module';
-import { VagasModule } from './vagas/vagas.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { UsuariosModule } from './usuarios/usuarios.module';
-import { SaudeModule } from './saude/saude.module';
+import { AuthModule } from './core/auth/auth.module';
+import { EmpresasModule } from './core/empresas/empresas.module';
+import { FuncionariosModule } from './core/funcionarios/funcionarios.module';
+import { UsuariosModule } from './core/usuarios/usuarios.module';
+import { RecrutamentoModule } from './recrutamento/recrutamento.module';
+import { PrismaModule } from './compartilhado/prisma/prisma.module';
+import { SaudeModule } from './compartilhado/saude/saude.module';
 
 /**
- * Monólito modular (FOUNDATION §5): cada domínio (Core, Recrutamento,
- * Gestão de Pessoas, Benefícios, Auditoria da Folha, Analytics, Integrações)
- * entra como um módulo Nest com fronteira explícita.
+ * Monólito modular (FOUNDATION §5): cada domínio de negócio é uma pasta
+ * própria em `src/`, com fronteira explícita — `core/` (Core: auth, empresas,
+ * usuários, funcionários) e `recrutamento/` (Recrutamento e Seleção) hoje;
+ * `gestao-pessoas/`, `beneficios/`, `auditoria-folha/`, `analytics/` e
+ * `integracoes/` entram do mesmo jeito, um módulo por vez. `compartilhado/`
+ * é infraestrutura técnica cross-cutting (banco, health check) — não é
+ * módulo de negócio.
  */
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
-    AuthModule,
     SaudeModule,
+    AuthModule,
     EmpresasModule,
     UsuariosModule,
     FuncionariosModule,
-    VagasModule,
+    RecrutamentoModule,
   ],
 })
 export class AppModule {}

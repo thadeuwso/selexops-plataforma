@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Post, Req } from '@nestjs/c
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../compartilhado/prisma/prisma.service';
 
 const esquemaNovaEmpresa = z.object({
   nomeFantasia: z.string().min(2),

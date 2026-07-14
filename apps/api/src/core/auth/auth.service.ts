@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../compartilhado/prisma/prisma.service';
 
 const hashToken = (jti: string) => createHash('sha256').update(jti).digest('hex');
 

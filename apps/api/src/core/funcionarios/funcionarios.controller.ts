@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@n
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../compartilhado/prisma/prisma.service';
 
 const esquemaCargo = z.object({ nomeCar: z.string().min(2), cbo: z.string().optional() });
 

@@ -3,7 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../compartilhado/prisma/prisma.service';
 
 const esquemaNovoUsuario = z.object({
   nomeUsu: z.string().min(2),
