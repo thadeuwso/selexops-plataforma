@@ -20,18 +20,18 @@
   --neutral-950: #16161B;
 
   /* ── Primitivos: marca (marrom SelX #5B3A29 — kit oficial 2026-07-11; acento dourado #A87832) ── */
-  --brand-50:  #F0F0F6;
-  --brand-100: #E2E2ED;
-  --brand-200: #C7C7DC;
-  --brand-300: #A4A3C4;
-  --brand-400: #7C7BA4;
-  --brand-500: #5A5980;
-  --brand-600: #4A496C;
-  --brand-700: #3B3A5C;
-  --brand-800: #2E2D49;
-  --brand-900: #232238;
+  --brand-50:  #F5EEEB;
+  --brand-100: #ECE0D9;
+  --brand-200: #E0C9BE;
+  --brand-300: #CEA997;
+  --brand-400: #BA8469;
+  --brand-500: #9E6447;
+  --brand-600: #7B4E37;
+  --brand-700: #5B3A29;
+  --brand-800: #422A1F;
+  --brand-900: #2D1D15;
   --brand-accent: #A87832;
-  --brand-950: #17172A;
+  --brand-950: #1B120D;
 
   /* ── Primitivos: semânticos de estado (dessaturados, significado fixo) ── */
   --green-50:  #EDF5F0;

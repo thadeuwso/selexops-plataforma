@@ -53,7 +53,7 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
     >
       <aside
         style={{
-          background: "var(--brand-900, #3A2717)",
+          background: "var(--brand-900)",
           color: "#fff",
           padding: "20px 16px",
           display: "flex",
