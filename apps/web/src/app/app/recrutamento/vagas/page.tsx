@@ -242,7 +242,7 @@ export default function PaginaVagas() {
                   </td>
                   <td style={{ ...celula, display: "flex", gap: 6, alignItems: "center" }}>
                     <Link
-                      href={`/app/vagas/${v.codVag}`}
+                      href={`/app/recrutamento/vagas/${v.codVag}`}
                       style={{
                         padding: "4px 10px",
                         borderRadius: 6,

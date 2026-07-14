@@ -4,13 +4,37 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 
-const itens = [
-  { rota: "/app", rotulo: "Empresas" },
-  { rota: "/app/vagas", rotulo: "Vagas" },
-  { rota: "/app/candidatos", rotulo: "Candidatos" },
-  { rota: "/app/funcionarios", rotulo: "Funcionários" },
-  { rota: "/app/organizacao", rotulo: "Organização" },
-  { rota: "/app/usuarios", rotulo: "Usuários" },
+interface ItemNav {
+  rota: string;
+  rotulo: string;
+}
+interface GrupoNav {
+  grupo: string;
+  itens: ItemNav[];
+}
+
+const navegacao: GrupoNav[] = [
+  { grupo: "", itens: [{ rota: "/app", rotulo: "Visão Geral" }] },
+  {
+    grupo: "Recrutamento e Seleção",
+    itens: [
+      { rota: "/app/recrutamento/vagas", rotulo: "Vagas" },
+      { rota: "/app/recrutamento/candidatos", rotulo: "Candidatos" },
+      { rota: "/app/recrutamento/admissao", rotulo: "Admissão" },
+    ],
+  },
+  {
+    grupo: "Empresa",
+    itens: [
+      { rota: "/app/empresa/cadastro", rotulo: "Empresas e filiais" },
+      { rota: "/app/empresa/funcionarios", rotulo: "Funcionários" },
+      { rota: "/app/empresa/organizacao", rotulo: "Departamentos e cargos" },
+    ],
+  },
+  {
+    grupo: "Administração",
+    itens: [{ rota: "/app/administracao/usuarios", rotulo: "Usuários" }],
+  },
 ];
 
 export default function LayoutApp({ children }: { children: ReactNode }) {
@@ -66,22 +90,41 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
           alt="SelexOps"
           style={{ height: 34 }}
         />
-        <nav style={{ display: "grid", gap: 4, fontSize: 14 }}>
-          {itens.map((i) => (
-            <Link
-              key={i.rota}
-              href={i.rota}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                color: "#fff",
-                textDecoration: "none",
-                background: rota === i.rota ? "rgba(255,255,255,.14)" : "transparent",
-                opacity: rota === i.rota ? 1 : 0.75,
-              }}
-            >
-              {i.rotulo}
-            </Link>
+        <nav style={{ display: "grid", gap: 2, fontSize: 14 }}>
+          {navegacao.map((g) => (
+            <div key={g.grupo || "raiz"} style={{ marginBottom: 8 }}>
+              {g.grupo && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    opacity: 0.55,
+                    padding: "12px 10px 4px",
+                  }}
+                >
+                  {g.grupo}
+                </div>
+              )}
+              {g.itens.map((i) => (
+                <Link
+                  key={i.rota}
+                  href={i.rota}
+                  style={{
+                    display: "block",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    color: "#fff",
+                    textDecoration: "none",
+                    background: rota === i.rota ? "rgba(255,255,255,.14)" : "transparent",
+                    opacity: rota === i.rota ? 1 : 0.75,
+                  }}
+                >
+                  {i.rotulo}
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
         <button
