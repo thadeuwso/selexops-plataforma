@@ -54,6 +54,8 @@ model Tenant {
   cdtHistoricos  CandidaturaHistorico[]
   estagioConfigs EstagioConfig[]
   matchResumos   MatchResumo[]
+  documentosModelo DocumentoModelo[]
+  assinaturas    Assinatura[]
 
   @@map("TSXTEN")
 }
@@ -173,6 +175,7 @@ model Funcionario {
   historicos      FuncionarioHistorico[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
+  assinaturas        Assinatura[]
 
   @@unique([codTen, codEmp, numCad])
   @@index([codTen])
@@ -695,4 +698,51 @@ model MatchResumo {
   candidatura Candidatura @relation(fields: [codCdt], references: [codCdt])
 
   @@map("TREMATCH")
+}
+
+// ===== Assinatura eletrônica de documentos (Core — TSX, exclusivo do SelexOps) =====
+// v1 sem fornecedor externo (decisão do Thadeu, 2026-07-14): assinatura simples
+// (consentimento + hash do conteúdo + IP + timestamp), suficiente para a maioria
+// dos documentos de admissão. Token opaco para acesso público (ADR-0004 §5) —
+// funcionário assina sem precisar de login/portal (que ainda não existe).
+
+/// Modelo de documento por tenant, com placeholders {{campo}} substituídos no envio.
+model DocumentoModelo {
+  codDoc         BigInt   @id @default(autoincrement()) @map("CODDOC")
+  codTen         BigInt   @map("CODTEN")
+  nomeDoc        String   @map("NOMEDOC")
+  conteudoModelo String   @map("CONTEUDOMODELO") @db.Text
+  dhInc          DateTime @default(now()) @map("DHINC")
+  codUsuInc      BigInt?  @map("CODUSUINC")
+  dhAlt          DateTime @updatedAt @map("DHALT")
+  codUsuAlt      BigInt?  @map("CODUSUALT")
+  ativo          String   @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant      Tenant       @relation(fields: [codTen], references: [codTen])
+  assinaturas Assinatura[]
+
+  @@map("TSXDOC")
+}
+
+/// Envio de um documento a um funcionário para assinatura (envelope).
+model Assinatura {
+  codAssin            BigInt    @id @default(autoincrement()) @map("CODASSIN")
+  codTen              BigInt    @map("CODTEN")
+  codDoc              BigInt    @map("CODDOC")
+  codFun              BigInt    @map("CODFUN")
+  conteudoRenderizado String    @map("CONTEUDORENDERIZADO") @db.Text
+  hashConteudo        String    @map("HASHCONTEUDO")
+  tokenPub            String    @unique @map("TOKENPUB")
+  status              String    @default("PENDENTE") @map("STATUS")
+  dhEnvio             DateTime  @default(now()) @map("DHENVIO")
+  dhAssinatura        DateTime? @map("DHASSINATURA")
+  ipAssinatura        String?   @map("IPASSINATURA")
+  codUsuInc           BigInt?   @map("CODUSUINC")
+
+  tenant      Tenant          @relation(fields: [codTen], references: [codTen])
+  documento   DocumentoModelo @relation(fields: [codDoc], references: [codDoc])
+  funcionario Funcionario     @relation(fields: [codFun], references: [codFun])
+
+  @@index([codTen, codFun])
+  @@map("TSXASSIN")
 }

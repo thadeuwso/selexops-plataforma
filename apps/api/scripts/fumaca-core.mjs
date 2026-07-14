@@ -415,6 +415,37 @@ verificar(
   timelineAdm.json?.some((e) => e.tipoEvento === "admissao_confirmada"),
 );
 
+// 16. Assinatura eletrônica própria (v1, sem fornecedor externo — Thadeu, 2026-07-14)
+const funAssin = await http("POST", "/funcionarios", {
+  codEmp: cadA.json?.codEmp, numCad: 5001, nomeFun: "Assinante Teste", cgc: "98765432100",
+  dtAdm: "2026-08-01", tipoContrato: "CLT", vlrSal: 4500,
+}, tokenA2);
+verificar("cria funcionário p/ teste de assinatura (201)", funAssin.status === 201);
+
+const modeloDoc = await http("POST", "/documentos-modelo", {
+  nomeDoc: "Contrato de Experiência",
+  conteudoModelo: "Eu, {{nomeFun}}, CPF {{cgc}}, admitido pela {{nomeEmpresa}} em {{dtAdm}}, regime {{tipoContrato}}.",
+}, tokenA2);
+verificar("cria modelo de documento (201)", modeloDoc.status === 201);
+
+const envioAssin = await http("POST", `/funcionarios/${funAssin.json?.codFun}/assinaturas`, { codDoc: modeloDoc.json?.codDoc }, tokenA2);
+verificar("envia documento p/ assinatura, gera token (201)", envioAssin.status === 201 && !!envioAssin.json?.tokenPub);
+
+const consultaPub = await http("GET", `/assinaturas/publico/${envioAssin.json?.tokenPub}`);
+verificar(
+  "consulta pública (SEM login) mostra conteúdo renderizado",
+  consultaPub.status === 200 && consultaPub.json?.conteudoRenderizado?.includes("Assinante Teste") && !consultaPub.json.conteudoRenderizado.includes("{{"),
+);
+
+const assinarPub = await http("POST", `/assinaturas/publico/${envioAssin.json?.tokenPub}/assinar`, {});
+verificar("assina publicamente (sem login)", assinarPub.status === 201 && assinarPub.json?.status === "ASSINADO");
+
+const assinarPubDeNovo = await http("POST", `/assinaturas/publico/${envioAssin.json?.tokenPub}/assinar`, {});
+verificar("reassinar já assinado → 400", assinarPubDeNovo.status === 400);
+
+const tokenInvalido = await http("GET", "/assinaturas/publico/token-inexistente-xyz");
+verificar("token inválido → 400", tokenInvalido.status === 400);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

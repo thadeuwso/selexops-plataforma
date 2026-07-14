@@ -22,6 +22,9 @@ const permissoes = [
   ["recrutamento.vagas.aprovar", "Aprovar, rejeitar e pedir ajustes em vagas"],
   ["recrutamento.candidatos.ler", "Ver candidatos e candidaturas"],
   ["recrutamento.candidatos.criar", "Cadastrar/importar candidatos e mover pipeline"],
+  ["core.documentos.ler", "Ver modelos de documento e assinaturas"],
+  ["core.documentos.criar", "Enviar documento para assinatura"],
+  ["core.documentos.editar", "Criar/editar modelos de documento"],
 ];
 
 for (const [chavePerm, descrPerm] of permissoes) {

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './core/auth/auth.module';
+import { DocumentosModule } from './core/documentos/documentos.module';
 import { EmpresasModule } from './core/empresas/empresas.module';
 import { FuncionariosModule } from './core/funcionarios/funcionarios.module';
 import { UsuariosModule } from './core/usuarios/usuarios.module';
@@ -26,6 +27,7 @@ import { SaudeModule } from './compartilhado/saude/saude.module';
     EmpresasModule,
     UsuariosModule,
     FuncionariosModule,
+    DocumentosModule,
     RecrutamentoModule,
   ],
 })
