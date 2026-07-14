@@ -4,6 +4,7 @@ import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
+import { FuncionariosService } from '../core/funcionarios/funcionarios.service';
 
 export const ESTAGIOS = [
   'applied', 'screening', 'analysis', 'knockout', 'shortlist', 'interview',
@@ -84,9 +85,23 @@ async function upsertCandidato(
   };
 }
 
+const esquemaConfirmarAdmissao = z.object({
+  numCad: z.coerce.bigint(),
+  dtAdm: z.coerce.date(),
+  vlrSal: z.coerce.number().positive().optional(),
+  cgc: z.string().optional(),
+  codCar: z.coerce.bigint().optional(),
+  codDep: z.coerce.bigint().optional(),
+  codCencus: z.coerce.bigint().optional(),
+  tipoContrato: z.string().default('CLT'),
+});
+
 @Controller()
 export class CandidatosController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly funcionariosService: FuncionariosService,
+  ) {}
 
   // ===== Canais de captação =====
   @Get('canais')
@@ -264,6 +279,90 @@ export class CandidatosController {
         },
       });
       return atualizada;
+    });
+  }
+
+  /**
+   * RN-REC-007: rascunho de admissão pré-preenchido com dados do candidato e da
+   * vaga — o RH revisa e confirma em `POST .../confirmar-admissao`. Nunca cria
+   * o funcionário sozinho; Recrutamento não duplica a lógica do Core (ver
+   * "09 - Módulos/README.md" — fronteiras entre módulos), só chama o serviço.
+   */
+  @Get('candidaturas/:codCdt/proposta-admissao')
+  @Permissoes('recrutamento.candidatos.ler')
+  propostaAdmissao(@Req() req: ReqAut, @Param('codCdt') codCdt: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cdt = await tx.candidatura.findFirst({
+        where: { codCdt: BigInt(codCdt), ativo: 'S' },
+        include: { candidato: true, vaga: true },
+      });
+      if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
+      if (cdt.estagio !== 'hired') {
+        throw new BadRequestException('Candidatura precisa estar no estágio "hired" para propor admissão');
+      }
+      if (cdt.codFun) throw new BadRequestException(`Já admitido (CODFUN ${cdt.codFun})`);
+
+      return {
+        codCdt: cdt.codCdt,
+        nomeFun: cdt.candidato.nomeCand,
+        cgc: cdt.candidato.cgc,
+        codEmp: cdt.vaga.codEmp,
+        codCar: cdt.vaga.codCar,
+        codDep: cdt.vaga.codDep,
+        tipoContrato: cdt.vaga.tipoContrato ?? 'CLT',
+        vlrSalSugerido: cdt.vaga.vlrSalMin && cdt.vaga.vlrSalMax
+          ? (Number(cdt.vaga.vlrSalMin) + Number(cdt.vaga.vlrSalMax)) / 2
+          : cdt.vaga.vlrSalMin ?? cdt.vaga.vlrSalMax ?? null,
+      };
+    });
+  }
+
+  /** Confirma a admissão: cria o funcionário no Core (via FuncionariosService) e vincula a candidatura. */
+  @Post('candidaturas/:codCdt/confirmar-admissao')
+  @Permissoes('core.funcionarios.criar')
+  confirmarAdmissao(@Req() req: ReqAut, @Param('codCdt') codCdt: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaConfirmarAdmissao, corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cdt = await tx.candidatura.findFirst({
+        where: { codCdt: BigInt(codCdt), ativo: 'S' },
+        include: { candidato: true, vaga: true },
+      });
+      if (!cdt) throw new BadRequestException('Candidatura inexistente neste tenant');
+      if (cdt.estagio !== 'hired') {
+        throw new BadRequestException('Candidatura precisa estar no estágio "hired" para confirmar admissão');
+      }
+      if (cdt.codFun) throw new BadRequestException(`Já admitido (CODFUN ${cdt.codFun})`);
+
+      const funcionario = await this.funcionariosService.admitir(tx, req.usuario.codTen, req.usuario.codUsu, {
+        codEmp: cdt.vaga.codEmp,
+        numCad: dados.numCad,
+        nomeFun: cdt.candidato.nomeCand,
+        cgc: dados.cgc ?? cdt.candidato.cgc ?? undefined,
+        dtAdm: dados.dtAdm,
+        codCar: dados.codCar ?? cdt.vaga.codCar ?? undefined,
+        codDep: dados.codDep ?? cdt.vaga.codDep ?? undefined,
+        codCencus: dados.codCencus,
+        tipoContrato: dados.tipoContrato,
+        vlrSal: dados.vlrSal,
+      });
+
+      await tx.candidatura.update({
+        where: { codCdt: cdt.codCdt },
+        data: { codFun: funcionario.codFun, codUsuAlt: req.usuario.codUsu },
+      });
+      await tx.candidaturaHistorico.create({
+        data: {
+          codTen: req.usuario.codTen,
+          codCdt: cdt.codCdt,
+          tipoEvento: 'admissao_confirmada',
+          rotuloPub: 'Admissão confirmada',
+          tipoAtor: 'usuario',
+          metadadosJson: { codFun: funcionario.codFun.toString(), numCad: dados.numCad.toString() },
+          codUsuInc: req.usuario.codUsu,
+        },
+      });
+
+      return { codCdt: cdt.codCdt, codFun: funcionario.codFun, numCad: funcionario.numCad };
     });
   }
 

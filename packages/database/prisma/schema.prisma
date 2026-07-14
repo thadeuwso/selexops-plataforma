@@ -172,6 +172,7 @@ model Funcionario {
   usuario         Usuario?
   historicos      FuncionarioHistorico[]
   dependentes     Dependente[]
+  candidaturasOrigem Candidatura[]
 
   @@unique([codTen, codEmp, numCad])
   @@index([codTen])
@@ -610,6 +611,7 @@ model Candidatura {
   estagio       String   @default("applied") @map("ESTAGIO")
   codCanal      BigInt   @map("CODCANAL")
   idExterno     String?  @map("IDEXTERNO")
+  codFun        BigInt?  @map("CODFUN") // RN-REC-007: preenchido ao confirmar admissao no Core
   respostasJson Json?    @map("RESPOSTASJSON")
   knockoutJson  Json?    @map("KNOCKOUTJSON")
   dhInc         DateTime @default(now()) @map("DHINC")
@@ -622,6 +624,7 @@ model Candidatura {
   vaga      Vaga                   @relation(fields: [codVag], references: [codVag])
   candidato Candidato              @relation(fields: [codCand], references: [codCand])
   canal     Canal                  @relation(fields: [codCanal], references: [codCanal])
+  funcionario Funcionario?         @relation(fields: [codFun], references: [codFun])
   timeline  CandidaturaHistorico[]
   match     MatchResumo?
 

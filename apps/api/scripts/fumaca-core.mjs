@@ -355,6 +355,66 @@ verificar("move estágio applied → screening", mover.status === 200 && mover.j
 const tl = await http("GET", `/candidaturas/${cdt.json?.codCdt}/timeline`, null, tokenA2);
 verificar("timeline registra recebimento + mudança de estágio", tl.status === 200 && tl.json?.length >= 2 && tl.json.at(-1)?.tipoEvento === "mudanca_estagio");
 
+// 14. Currículo: upload, extração de texto e prefill de contato (heurística, sem IA)
+const candDiana = await http("POST", "/candidatos", { nomeCand: "Diana Rocha", email: `diana.${rodada}@mail.com` }, tokenA2);
+verificar("cadastra candidato p/ teste de currículo (201)", candDiana.status === 201);
+
+const textoCv = `Diana Rocha\nEmail: diana.${rodada}@mail.com\nTelefone: (31) 98877-6655\n\nExperiencia\nAnalista - Empresa Y - 2019-2024\n`;
+const form = new FormData();
+form.set("arquivo", new Blob([textoCv], { type: "text/plain" }), "cv-diana.txt");
+const uploadRes = await fetch(`${base}/candidatos/${candDiana.json?.codCand}/curriculo`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${tokenA2}` },
+  body: form,
+});
+const uploadJson = await uploadRes.json().catch(() => null);
+verificar("upload de currículo extrai texto (201)", uploadRes.status === 201 && uploadJson?.statusExtracao === "ok");
+
+const candidatosLista = await http("GET", "/candidatos", null, tokenA2);
+const diana = candidatosLista.json?.find((c) => c.codCand === candDiana.json?.codCand);
+verificar("telefone prefill a partir do currículo (heurística)", diana?.fone === "(31) 98877-6655");
+
+const curriculosLista = await http("GET", `/candidatos/${candDiana.json?.codCand}/curriculo`, null, tokenA2);
+verificar("lista currículos do candidato (1)", curriculosLista.status === 200 && curriculosLista.json?.length === 1);
+
+// 15. RN-REC-007: hired -> proposta de admissão -> confirmar-admissão no Core
+const cdtAdm = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Diana Rocha", email: `diana.${rodada}@mail.com` },
+  codCanal: canal.json?.codCanal,
+}, tokenA2);
+verificar("candidatura para admissão (201)", cdtAdm.status === 201);
+
+const propostaCedo = await http("GET", `/candidaturas/${cdtAdm.json?.codCdt}/proposta-admissao`, null, tokenA2);
+verificar("proposta antes de hired → 400", propostaCedo.status === 400);
+
+const moverHired = await http("PATCH", `/candidaturas/${cdtAdm.json?.codCdt}/estagio`, { estagio: "hired" }, tokenA2);
+verificar("move estágio para hired", moverHired.status === 200 && moverHired.json?.estagio === "hired");
+
+const proposta = await http("GET", `/candidaturas/${cdtAdm.json?.codCdt}/proposta-admissao`, null, tokenA2);
+verificar(
+  "proposta de admissão pré-preenchida (nome, empresa, tipo contrato)",
+  proposta.status === 200 && proposta.json?.nomeFun === "Diana Rocha" && proposta.json?.tipoContrato === "CLT",
+);
+
+const confirmar = await http("POST", `/candidaturas/${cdtAdm.json?.codCdt}/confirmar-admissao`, {
+  numCad: 9500 + (rodada % 400),
+  dtAdm: "2026-08-01",
+  vlrSal: 5000,
+}, tokenA2);
+verificar("confirma admissão cria funcionário (201/200)", confirmar.status < 300 && !!confirmar.json?.codFun);
+
+const confirmarDeNovo = await http("POST", `/candidaturas/${cdtAdm.json?.codCdt}/confirmar-admissao`, {
+  numCad: 9999,
+  dtAdm: "2026-08-01",
+}, tokenA2);
+verificar("segunda confirmação bloqueada (já admitido) → 400", confirmarDeNovo.status === 400);
+
+const timelineAdm = await http("GET", `/candidaturas/${cdtAdm.json?.codCdt}/timeline`, null, tokenA2);
+verificar(
+  "timeline registra admissao_confirmada",
+  timelineAdm.json?.some((e) => e.tipoEvento === "admissao_confirmada"),
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

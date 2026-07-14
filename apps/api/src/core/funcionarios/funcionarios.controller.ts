@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';
 import { PrismaService } from '../../compartilhado/prisma/prisma.service';
+import { FuncionariosService } from './funcionarios.service';
 
 const esquemaCargo = z.object({ nomeCar: z.string().min(2), cbo: z.string().optional() });
 
@@ -41,7 +42,10 @@ type ReqAut = Request & { usuario: UsuarioAutenticado };
 
 @Controller()
 export class FuncionariosController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly funcionariosService: FuncionariosService,
+  ) {}
 
   // ===== Cargos =====
   @Get('cargos')
@@ -119,55 +123,9 @@ export class FuncionariosController {
   @Permissoes('core.funcionarios.criar')
   criarFuncionario(@Req() req: ReqAut, @Body() corpo: unknown) {
     const dados = validar(esquemaFuncionario, corpo);
-    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const empresa = await tx.empresa.findFirst({ where: { codEmp: dados.codEmp, ativo: 'S' } });
-      if (!empresa) throw new BadRequestException('Empresa/filial inexistente neste tenant');
-      // Vínculos opcionais precisam existir no tenant (RLS já limita; validamos para erro claro)
-      for (const [campo, tabela] of [
-        ['codCar', 'cargo'],
-        ['codDep', 'departamento'],
-      ] as const) {
-        const cod = dados[campo];
-        if (cod) {
-          const existe = await (tx as never as Record<string, { findFirst: (a: object) => Promise<unknown> }>)[
-            tabela
-          ].findFirst({ where: { ativo: 'S', [campo === 'codCar' ? 'codCar' : 'codDep']: cod } });
-          if (!existe) throw new BadRequestException(`${tabela} inexistente neste tenant`);
-        }
-      }
-
-      const funcionario = await tx.funcionario.create({
-        data: {
-          codTen: req.usuario.codTen,
-          codEmp: dados.codEmp,
-          numCad: dados.numCad,
-          nomeFun: dados.nomeFun,
-          cgc: dados.cgc,
-          dtAdm: dados.dtAdm,
-          dtNasc: dados.dtNasc,
-          codCar: dados.codCar,
-          codDep: dados.codDep,
-          codCencus: dados.codCencus,
-          tipoContrato: dados.tipoContrato,
-          vlrSal: dados.vlrSal,
-          codUsuInc: req.usuario.codUsu,
-        },
-        select: { codFun: true, numCad: true, nomeFun: true },
-      });
-
-      await tx.funcionarioHistorico.create({
-        data: {
-          codTen: req.usuario.codTen,
-          codFun: funcionario.codFun,
-          tipoMud: 'ADMISSAO',
-          valorNovo: dados.nomeFun,
-          dtMud: dados.dtAdm,
-          codUsuInc: req.usuario.codUsu,
-        },
-      });
-
-      return funcionario;
-    });
+    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
+      this.funcionariosService.admitir(tx, req.usuario.codTen, req.usuario.codUsu, dados),
+    );
   }
 
   // ===== Projetos (TCSPRJ) e Contratos de serviço (TCSCON) — espelhos mínimos =====

@@ -23,3 +23,6 @@ packages/database/generated/
 .DS_Store
 Thumbs.db
 *.log
+
+# uploads locais (v1 — ver débito técnico em 09 - Módulos/Recrutamento e Seleção/02)
+apps/api/uploads/
