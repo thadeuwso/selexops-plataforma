@@ -1,5 +1,6 @@
 "use client";
-import { useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
@@ -8,10 +9,19 @@ interface Candidatura {
   codCdt: string;
   estagio: string;
   dhInc: string;
+  codFun: string | null;
   candidato: { codCand: string; nomeCand: string; email: string; cidade: string | null };
   canal: { nomeCanal: string };
   match: { scoreGeral: number } | null;
+  processoAdmissao: { status: string } | null;
 }
+
+const ROTULO_STATUS_ADMISSAO: Record<string, string> = {
+  AGUARDANDO_CANDIDATO: "Aguardando candidato",
+  AGUARDANDO_APROVACAO_DP: "Aguardando aprovação do DP",
+  AJUSTES_SOLICITADOS: "Ajustes solicitados",
+  APROVADO: "Aprovado",
+};
 interface Vaga {
   codVag: string;
   titulo: string;
@@ -43,6 +53,7 @@ const rotuloEstagio = (chave: string) => TODOS_ESTAGIOS.find((e) => e.chave === 
 
 export default function PipelineVaga() {
   const { codVag } = useParams<{ codVag: string }>();
+  const rotear = useRouter();
   const [vaga, setVaga] = useState<Vaga | null>(null);
   const [candidaturas, setCandidaturas] = useState<Candidatura[]>([]);
   const [canais, setCanais] = useState<Canal[]>([]);
@@ -50,6 +61,7 @@ export default function PipelineVaga() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({ nomeCand: "", email: "", codCanal: "" });
+  const [iniciandoAdmissao, setIniciandoAdmissao] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     const [v, c, ca] = await Promise.all([
@@ -69,6 +81,17 @@ export default function PipelineVaga() {
   async function moverEstagio(codCdt: string, estagio: string) {
     await api(`/candidaturas/${codCdt}/estagio`, { metodo: "PATCH", corpo: { estagio } });
     await carregar();
+  }
+
+  async function iniciarAdmissao(codCdt: string) {
+    setIniciandoAdmissao(codCdt);
+    const r = await api(`/candidaturas/${codCdt}/admissao/iniciar`, { metodo: "POST" });
+    setIniciandoAdmissao(null);
+    if (r.status !== 201) {
+      alert("Não foi possível iniciar a admissão.");
+      return;
+    }
+    rotear.push(`/app/recrutamento/admissao/${codCdt}`);
   }
 
   async function candidatar(e: React.FormEvent) {
@@ -151,6 +174,49 @@ export default function PipelineVaga() {
                         <option key={e.chave} value={e.chave}>{e.rotulo}</option>
                       ))}
                     </Selecao>
+
+                    {col.chave === "hired" && (
+                      <div style={{ marginTop: 8 }}>
+                        {c.codFun ? (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              background: "var(--green-100, #D6E9DF)",
+                              color: "var(--green-700, #1D533B)",
+                            }}
+                          >
+                            Admitido
+                          </span>
+                        ) : c.processoAdmissao ? (
+                          <Link
+                            href={`/app/recrutamento/admissao/${c.codCdt}`}
+                            style={{ fontSize: 12, color: "var(--text-link)" }}
+                          >
+                            Admissão: {ROTULO_STATUS_ADMISSAO[c.processoAdmissao.status] ?? c.processoAdmissao.status}
+                          </Link>
+                        ) : (
+                          <button
+                            onClick={() => iniciarAdmissao(c.codCdt)}
+                            disabled={iniciandoAdmissao === c.codCdt}
+                            style={{
+                              padding: "4px 10px",
+                              borderRadius: 6,
+                              border: "1px solid var(--border-default)",
+                              background: "var(--surface-default)",
+                              fontSize: 12,
+                              cursor: "pointer",
+                              font: "inherit",
+                            }}
+                          >
+                            {iniciandoAdmissao === c.codCdt ? "Iniciando..." : "Iniciar Admissão"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

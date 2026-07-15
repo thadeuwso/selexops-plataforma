@@ -606,6 +606,14 @@ verificar(
   assinaturasListaB.status === 200 && !assinaturasListaB.json?.some((a) => a.codAssin === aprovarAdmissao.json?.assinaturas?.[0]?.codAssin),
 );
 
+// 19. Pipeline expõe codFun/processoAdmissao (botão "Iniciar Admissão" no kanban)
+const pipelineComAdmissao = await http("GET", `/vagas/${vaga.json?.codVag}/candidaturas`, null, tokenA2);
+const cdtNoPipeline = pipelineComAdmissao.json?.find((c) => c.codCdt === cdtProc.json?.codCdt);
+verificar(
+  "pipeline mostra codFun após aprovação (candidatura já admitida)",
+  pipelineComAdmissao.status === 200 && cdtNoPipeline?.codFun === aprovarAdmissao.json?.codFun,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

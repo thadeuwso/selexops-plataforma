@@ -240,9 +240,11 @@ export class CandidatosController {
           codCdt: true,
           estagio: true,
           dhInc: true,
+          codFun: true,
           candidato: { select: { codCand: true, nomeCand: true, email: true, cidade: true } },
           canal: { select: { nomeCanal: true } },
           match: { select: { scoreGeral: true } },
+          processoAdmissao: { select: { status: true } },
         },
       }),
     );
