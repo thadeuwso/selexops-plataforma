@@ -47,6 +47,47 @@ function validar<T extends z.ZodTypeAny>(esquema: T, corpo: unknown): z.infer<T>
 type ReqAut = Request & { usuario: UsuarioAutenticado };
 type Tx = Parameters<Parameters<PrismaService['executarNoTenant']>[1]>[0];
 
+interface SinalKnockout {
+  codVagPer: string;
+  pergunta: string;
+  respostaCandidato: unknown;
+  respElimina: string;
+}
+
+/**
+ * RN-REC-004: sinalização automática de resposta eliminatória — não move a
+ * candidatura de estágio (porte fiel do 1.0: lá também é só sinal pro
+ * recrutador decidir, o estágio "knockout" nunca foi movido sozinho).
+ * Qualquer pergunta reprovada já sinaliza (mesma regra do 1.0: falha em
+ * qualquer uma sinaliza, não precisa reprovar em todas).
+ */
+function avaliarSinalizacaoKnockout(
+  perguntas: { codVagPer: bigint; pergunta: string; tipoResp: string; obrigatoria: string; respElimina: string | null }[],
+  respostas: Record<string, unknown>,
+): SinalKnockout | null {
+  for (const p of perguntas) {
+    if (!p.respElimina) continue;
+    const resposta = respostas[p.codVagPer.toString()];
+
+    if (resposta === undefined || resposta === null) {
+      if (p.obrigatoria === 'S') {
+        return { codVagPer: p.codVagPer.toString(), pergunta: p.pergunta, respostaCandidato: null, respElimina: p.respElimina };
+      }
+      continue;
+    }
+
+    const bateu =
+      p.tipoResp === 'TEXTO'
+        ? String(resposta).toLowerCase().includes(p.respElimina.toLowerCase())
+        : String(resposta).trim().toLowerCase() === p.respElimina.trim().toLowerCase();
+
+    if (bateu) {
+      return { codVagPer: p.codVagPer.toString(), pergunta: p.pergunta, respostaCandidato: resposta, respElimina: p.respElimina };
+    }
+  }
+  return null;
+}
+
 /** Dedup de candidato por e-mail (e CPF quando houver) no tenant — RN-REC-009. */
 async function upsertCandidato(
   tx: Tx,
@@ -164,7 +205,10 @@ export class CandidatosController {
   candidatar(@Req() req: ReqAut, @Param('codVag') codVag: string, @Body() corpo: unknown) {
     const dados = validar(esquemaCandidatura, corpo);
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const vaga = await tx.vaga.findFirst({ where: { codVag: BigInt(codVag), ativo: 'S' } });
+      const vaga = await tx.vaga.findFirst({
+        where: { codVag: BigInt(codVag), ativo: 'S' },
+        include: { perguntas: true },
+      });
       if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
       if (vaga.status !== 'ABERTA') {
         throw new BadRequestException(`Vaga ${vaga.status} não recebe candidaturas`);
@@ -202,6 +246,9 @@ export class CandidatosController {
         return { codCdt: existente.codCdt, estagio: existente.estagio, reentrada: true };
       }
 
+      const respostas = (dados.respostas as Record<string, unknown>) ?? {};
+      const sinal = avaliarSinalizacaoKnockout(vaga.perguntas, respostas);
+
       const candidatura = await tx.candidatura.create({
         data: {
           codTen: req.usuario.codTen,
@@ -210,6 +257,7 @@ export class CandidatosController {
           codCanal: dados.codCanal,
           idExterno: dados.idExterno,
           respostasJson: (dados.respostas as Prisma.InputJsonValue) ?? undefined,
+          knockoutJson: (sinal as unknown as Prisma.InputJsonValue) ?? undefined,
           codUsuInc: req.usuario.codUsu,
         },
       });
@@ -225,7 +273,19 @@ export class CandidatosController {
           codUsuInc: req.usuario.codUsu,
         },
       });
-      return { codCdt: candidatura.codCdt, codCand: candidato.codCand, estagio: 'applied' };
+      if (sinal) {
+        await tx.candidaturaHistorico.create({
+          data: {
+            codTen: req.usuario.codTen,
+            codCdt: candidatura.codCdt,
+            tipoEvento: 'sinalizacao_knockout',
+            notaInterna: `Resposta eliminatória em "${sinal.pergunta}" — sinalização automática, decisão final é do recrutador.`,
+            tipoAtor: 'sistema',
+            metadadosJson: sinal as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return { codCdt: candidatura.codCdt, codCand: candidato.codCand, estagio: 'applied', sinalizadoKnockout: !!sinal };
     });
   }
 
@@ -241,6 +301,7 @@ export class CandidatosController {
           estagio: true,
           dhInc: true,
           codFun: true,
+          knockoutJson: true,
           candidato: { select: { codCand: true, nomeCand: true, email: true, cidade: true } },
           canal: { select: { nomeCanal: true } },
           match: { select: { scoreGeral: true } },

@@ -302,6 +302,9 @@ const vaga = await http(
       { descrReq: "Experiência com Sankhya", tipoReq: "OBRIGATORIO", knockout: "S" },
       { descrReq: "Inglês intermediário", tipoReq: "DESEJAVEL" },
     ],
+    perguntas: [
+      { pergunta: "Possui CNH categoria B?", respElimina: "Não" },
+    ],
   },
   tokenA2,
 );
@@ -321,6 +324,11 @@ verificar(
   "detalhe traz requisitos tipados e knockout",
   detalhe.status === 200 && detalhe.json?.requisitos?.length === 2 && detalhe.json.requisitos[0].knockout === "S",
 );
+verificar(
+  "detalhe traz pergunta de triagem persistida",
+  detalhe.json?.perguntas?.length === 1 && detalhe.json.perguntas[0].respElimina === "Não",
+);
+const codVagPer = detalhe.json?.perguntas?.[0]?.codVagPer;
 
 const vagasB = await http("GET", "/vagas", null, tokenB);
 verificar("tenant B não vê vagas do A (isolamento)", vagasB.status === 200 && vagasB.json?.length === 0);
@@ -354,6 +362,34 @@ verificar("move estágio applied → screening", mover.status === 200 && mover.j
 
 const tl = await http("GET", `/candidaturas/${cdt.json?.codCdt}/timeline`, null, tokenA2);
 verificar("timeline registra recebimento + mudança de estágio", tl.status === 200 && tl.json?.length >= 2 && tl.json.at(-1)?.tipoEvento === "mudanca_estagio");
+
+// 13b. RN-REC-004: sinalização automática de knockout (não move estágio — decisão é do recrutador, como no 1.0)
+const cdtSemRisco = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Bruno Lima", email: `bruno.${rodada}@mail.com` },
+  codCanal: canal.json?.codCanal,
+  respostas: { [codVagPer]: "Sim" },
+}, tokenA2);
+verificar("resposta não eliminatória → sem sinalização", cdtSemRisco.status === 201 && cdtSemRisco.json?.sinalizadoKnockout === false);
+
+const cdtComRisco = await http("POST", `/vagas/${vaga.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Carla Mendes", email: `carla.${rodada}@mail.com` },
+  codCanal: canal.json?.codCanal,
+  respostas: { [codVagPer]: "Não" },
+}, tokenA2);
+verificar("resposta eliminatória → sinalizada (201)", cdtComRisco.status === 201 && cdtComRisco.json?.sinalizadoKnockout === true);
+
+const pipelineComSinal = await http("GET", `/vagas/${vaga.json?.codVag}/candidaturas`, null, tokenA2);
+const candidaturaSinalizada = pipelineComSinal.json?.find((c) => c.codCdt === cdtComRisco.json?.codCdt);
+verificar(
+  "sinalizada continua em applied (não elimina de verdade) e mostra a pergunta",
+  candidaturaSinalizada?.estagio === "applied" && candidaturaSinalizada?.knockoutJson?.pergunta === "Possui CNH categoria B?",
+);
+
+const tlSinal = await http("GET", `/candidaturas/${cdtComRisco.json?.codCdt}/timeline`, null, tokenA2);
+verificar(
+  "timeline registra sinalização automática, ator sistema",
+  tlSinal.json?.some((e) => e.tipoEvento === "sinalizacao_knockout" && e.tipoAtor === "sistema"),
+);
 
 // 14. Currículo: upload, extração de texto e prefill de contato (heurística, sem IA)
 const candDiana = await http("POST", "/candidatos", { nomeCand: "Diana Rocha", email: `diana.${rodada}@mail.com` }, tokenA2);

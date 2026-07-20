@@ -10,6 +10,7 @@ interface Candidatura {
   estagio: string;
   dhInc: string;
   codFun: string | null;
+  knockoutJson: { pergunta: string } | null;
   candidato: { codCand: string; nomeCand: string; email: string; cidade: string | null };
   canal: { nomeCanal: string };
   match: { scoreGeral: number } | null;
@@ -26,6 +27,7 @@ interface Vaga {
   codVag: string;
   titulo: string;
   status: string;
+  perguntas: { codVagPer: string; pergunta: string }[];
 }
 interface Canal {
   codCanal: string;
@@ -61,6 +63,7 @@ export default function PipelineVaga() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({ nomeCand: "", email: "", codCanal: "" });
+  const [respostas, setRespostas] = useState<Record<string, string>>({});
   const [iniciandoAdmissao, setIniciandoAdmissao] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
@@ -98,9 +101,9 @@ export default function PipelineVaga() {
     e.preventDefault();
     setErro(null);
     setSalvando(true);
-    const r = await api(`/vagas/${codVag}/candidaturas`, {
+    const r = await api<{ sinalizadoKnockout?: boolean }>(`/vagas/${codVag}/candidaturas`, {
       metodo: "POST",
-      corpo: { candidato: { nomeCand: form.nomeCand, email: form.email }, codCanal: form.codCanal },
+      corpo: { candidato: { nomeCand: form.nomeCand, email: form.email }, codCanal: form.codCanal, respostas },
     });
     setSalvando(false);
     if (r.status !== 201) {
@@ -109,6 +112,10 @@ export default function PipelineVaga() {
     }
     setAberta(false);
     setForm({ nomeCand: "", email: "", codCanal: "" });
+    setRespostas({});
+    if (r.json?.sinalizadoKnockout) {
+      alert("Candidatura registrada — atenção: uma resposta eliminatória foi sinalizada na triagem.");
+    }
     await carregar();
   }
 
@@ -165,6 +172,23 @@ export default function PipelineVaga() {
                       via {c.canal.nomeCanal}
                       {c.match && ` · score ${c.match.scoreGeral}`}
                     </div>
+                    {c.knockoutJson && (
+                      <div
+                        title={`Resposta eliminatória em "${c.knockoutJson.pergunta}" — decisão é sua`}
+                        style={{
+                          marginTop: 6,
+                          display: "inline-block",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: "var(--amber-100, #F2E3C4)",
+                          color: "var(--amber-700, #714E08)",
+                        }}
+                      >
+                        ⚠ Eliminaria na triagem
+                      </div>
+                    )}
                     <Selecao
                       value={c.estagio}
                       onChange={(e) => moverEstagio(c.codCdt, e.target.value)}
@@ -268,6 +292,30 @@ export default function PipelineVaga() {
               ))}
             </Selecao>
           </Campo>
+
+          {vaga.perguntas.length > 0 && (
+            <div>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Perguntas de triagem</span>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "4px 0 8px" }}>
+                Registre o que o candidato respondeu (via canal externo, e-mail, telefone...).
+              </p>
+              <div style={{ display: "grid", gap: 10 }}>
+                {vaga.perguntas.map((p) => (
+                  <Campo key={p.codVagPer} rotulo={p.pergunta}>
+                    <Selecao
+                      value={respostas[p.codVagPer] ?? ""}
+                      onChange={(e) => setRespostas({ ...respostas, [p.codVagPer]: e.target.value })}
+                    >
+                      <option value="">— não respondido —</option>
+                      <option value="Sim">Sim</option>
+                      <option value="Não">Não</option>
+                    </Selecao>
+                  </Campo>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Erro mensagem={erro} />
           <BotaoPrimario type="submit" disabled={salvando}>
             {salvando ? "Registrando..." : "Registrar candidatura"}

@@ -27,6 +27,16 @@ const esquemaVaga = z.object({
       }),
     )
     .default([]),
+  perguntas: z
+    .array(
+      z.object({
+        pergunta: z.string().min(3),
+        tipoResp: z.enum(['SIM_NAO', 'TEXTO', 'NUMERO']).default('SIM_NAO'),
+        obrigatoria: z.enum(['S', 'N']).default('S'),
+        respElimina: z.string().optional(),
+      }),
+    )
+    .default([]),
 });
 
 /**
@@ -124,7 +134,7 @@ export class VagasController {
       const empresa = await tx.empresa.findFirst({ where: { codEmp: dados.codEmp, ativo: 'S' } });
       if (!empresa) throw new BadRequestException('Empresa/filial inexistente neste tenant');
 
-      const { requisitos, ...vagaDados } = dados;
+      const { requisitos, perguntas, ...vagaDados } = dados;
       const vaga = await tx.vaga.create({
         data: { codTen: req.usuario.codTen, ...vagaDados, codUsuInc: req.usuario.codUsu },
       });
@@ -134,6 +144,16 @@ export class VagasController {
             codTen: req.usuario.codTen,
             codVag: vaga.codVag,
             ...r,
+            ordem: i + 1,
+          })),
+        });
+      }
+      if (perguntas.length > 0) {
+        await tx.vagaPergunta.createMany({
+          data: perguntas.map((p, i) => ({
+            codTen: req.usuario.codTen,
+            codVag: vaga.codVag,
+            ...p,
             ordem: i + 1,
           })),
         });

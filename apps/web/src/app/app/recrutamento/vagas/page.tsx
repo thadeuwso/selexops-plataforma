@@ -31,6 +31,11 @@ interface Requisito {
   knockout: boolean;
   origemIa: boolean;
 }
+interface Pergunta {
+  pergunta: string;
+  respElimina: "" | "Sim" | "Não";
+  origemIa: boolean;
+}
 interface RespostaEstruturarIa {
   titulo: string;
   senioridade: string | null;
@@ -84,6 +89,7 @@ export default function PaginaVagas() {
     codDep: "",
   });
   const [requisitos, setRequisitos] = useState<Requisito[]>([]);
+  const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
   const [textoIa, setTextoIa] = useState("");
   const [estruturando, setEstruturando] = useState(false);
   const [erroIa, setErroIa] = useState<string | null>(null);
@@ -118,6 +124,7 @@ export default function PaginaVagas() {
     setErroIa(null);
     setIaAplicada(false);
     setRequisitos([]);
+    setPerguntas([]);
   }
 
   /** Cola a descrição bruta e estrutura com IA (AI Gateway) — nada é publicado sozinho, o RH revisa aqui. */
@@ -150,6 +157,9 @@ export default function PaginaVagas() {
     setRequisitos(
       (d.requisitos ?? []).map((r) => ({ descrReq: r.descrReq, tipoReq: r.tipoReq, knockout: r.knockout, origemIa: true })),
     );
+    setPerguntas(
+      (d.perguntas ?? []).map((p) => ({ pergunta: p.pergunta, respElimina: "", origemIa: true })),
+    );
     setIaAplicada(true);
   }
 
@@ -161,6 +171,16 @@ export default function PaginaVagas() {
   }
   function atualizarRequisito(i: number, patch: Partial<Requisito>) {
     setRequisitos((r) => r.map((req, idx) => (idx === i ? { ...req, ...patch, origemIa: false } : req)));
+  }
+
+  function adicionarPergunta() {
+    setPerguntas((p) => [...p, { pergunta: "", respElimina: "", origemIa: false }]);
+  }
+  function removerPergunta(i: number) {
+    setPerguntas((p) => p.filter((_, idx) => idx !== i));
+  }
+  function atualizarPergunta(i: number, patch: Partial<Pergunta>) {
+    setPerguntas((p) => p.map((per, idx) => (idx === i ? { ...per, ...patch } : per)));
   }
 
   async function salvar(e: React.FormEvent) {
@@ -182,6 +202,9 @@ export default function PaginaVagas() {
         requisitos: requisitos
           .filter((r) => r.descrReq.trim())
           .map((r) => ({ descrReq: r.descrReq, tipoReq: r.tipoReq, knockout: r.knockout ? "S" : "N" })),
+        perguntas: perguntas
+          .filter((p) => p.pergunta.trim())
+          .map((p) => ({ pergunta: p.pergunta, respElimina: p.respElimina || undefined })),
       },
     });
     setSalvando(false);
@@ -466,6 +489,78 @@ export default function PaginaVagas() {
                       type="button"
                       onClick={() => removerRequisito(i)}
                       aria-label="Remover requisito"
+                      style={{ border: "none", background: "none", color: "var(--red-600, #9A3833)", cursor: "pointer", fontSize: 16 }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Perguntas de triagem</span>
+              <button
+                type="button"
+                onClick={adicionarPergunta}
+                style={{ border: "none", background: "none", color: "var(--action-primary, var(--brand-700))", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+              >
+                + adicionar
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px" }}>
+              Se marcar uma resposta como eliminatória, a candidatura não é reprovada sozinha — fica sinalizada pro
+              recrutador decidir (nunca automático de verdade).
+            </p>
+            {perguntas.length === 0 && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+                Nenhuma pergunta ainda — use a IA acima ou adicione manualmente.
+              </p>
+            )}
+            <div style={{ display: "grid", gap: 8 }}>
+              {perguntas.map((p, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto auto",
+                    gap: 8,
+                    alignItems: "center",
+                    padding: 8,
+                    border: "1px solid var(--border-default)",
+                    borderRadius: 8,
+                  }}
+                >
+                  <Entrada
+                    value={p.pergunta}
+                    placeholder="Pergunta (resposta sim/não)"
+                    onChange={(e) => atualizarPergunta(i, { pergunta: e.target.value })}
+                    style={{ fontSize: 13 }}
+                  />
+                  <Selecao
+                    value={p.respElimina}
+                    onChange={(e) => atualizarPergunta(i, { respElimina: e.target.value as Pergunta["respElimina"] })}
+                    style={{ fontSize: 12, padding: "6px 8px" }}
+                  >
+                    <option value="">Não elimina</option>
+                    <option value="Sim">Elimina se "Sim"</option>
+                    <option value="Não">Elimina se "Não"</option>
+                  </Selecao>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {p.origemIa && (
+                      <span
+                        title="Gerado pela IA"
+                        style={{ fontSize: 11, padding: "2px 6px", borderRadius: 999, background: "var(--brand-100)", color: "var(--brand-800)" }}
+                      >
+                        ✨ IA
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removerPergunta(i)}
+                      aria-label="Remover pergunta"
                       style={{ border: "none", background: "none", color: "var(--red-600, #9A3833)", cursor: "pointer", fontSize: 16 }}
                     >
                       ×
