@@ -1001,6 +1001,24 @@ verificar(
     typeof vagaMatchKpi?.altaAderencia === "number" && typeof vagaMatchKpi?.diasEmAberto === "number",
 );
 
+// 27. Responsável da vaga (RN-REC-012)
+const usuariosTenant = await http("GET", "/usuarios", null, tokenA2);
+const meuUsuario = usuariosTenant.json?.[0];
+const atribui = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: meuUsuario?.codUsu }, tokenA2);
+verificar("atribui responsável à vaga (200)", atribui.status === 200 && atribui.json?.codUsuResp === meuUsuario?.codUsu);
+const vagaComResp = await http("GET", `/vagas/${vagaMatch.json?.codVag}`, null, tokenA2);
+verificar("detalhe da vaga traz o responsável com nome", vagaComResp.json?.responsavel?.nomeUsu === meuUsuario?.nomeUsu);
+const listaComResp = await http("GET", "/vagas", null, tokenA2);
+verificar(
+  "lista de vagas traz o responsável",
+  listaComResp.json?.find((v) => v.codVag === vagaMatch.json?.codVag)?.responsavel?.codUsu === meuUsuario?.codUsu,
+);
+const limpaResp = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: null }, tokenA2);
+const vagaSemResp = await http("GET", `/vagas/${vagaMatch.json?.codVag}`, null, tokenA2);
+verificar("remove responsável (null) limpa o campo", limpaResp.status === 200 && vagaSemResp.json?.responsavel === null);
+const respOutroTenant = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: meuUsuario?.codUsu }, tokenB);
+verificar("tenant B não atribui responsável em vaga do tenant A → 400", respOutroTenant.status === 400);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

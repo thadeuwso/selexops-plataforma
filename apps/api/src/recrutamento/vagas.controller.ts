@@ -18,6 +18,7 @@ const esquemaVaga = z.object({
   tipoContrato: z.string().optional(),
   codDep: z.coerce.bigint().optional(),
   codCar: z.coerce.bigint().optional(),
+  codUsuResp: z.coerce.bigint().optional(),
   requisitos: z
     .array(
       z.object({
@@ -129,6 +130,7 @@ export class VagasController {
           empresa: { select: { codEmp: true, nomeFantasia: true } },
           departamento: { select: { descrDep: true } },
           cargo: { select: { nomeCar: true } },
+          responsavel: { select: { codUsu: true, nomeUsu: true } },
         },
       });
 
@@ -185,6 +187,7 @@ export class VagasController {
           empresa: { select: { nomeFantasia: true } },
           departamento: true,
           cargo: true,
+          responsavel: { select: { codUsu: true, nomeUsu: true } },
           requisitos: { where: { ativo: 'S' }, orderBy: { ordem: 'asc' } },
           perguntas: { where: { ativo: 'S' }, orderBy: { ordem: 'asc' } },
           _count: { select: { candidaturas: true } },
@@ -357,6 +360,23 @@ export class VagasController {
       }
 
       return { ok: true, avisos, bloqueadoPorCandidatura: !podeRemover };
+    });
+  }
+
+  /** Atribui/remove o recrutador responsável pela vaga (RN-REC-012). `codUsuResp` null limpa. */
+  @Patch(':codVag/responsavel')
+  @Permissoes('recrutamento.vagas.criar')
+  atribuirResponsavel(@Req() req: ReqAut, @Param('codVag') codVag: string, @Body() corpo: unknown) {
+    const dados = validar(z.object({ codUsuResp: z.coerce.bigint().nullable() }), corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const vaga = await tx.vaga.findFirst({ where: { codVag: BigInt(codVag), ativo: 'S' } });
+      if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
+      if (dados.codUsuResp != null) {
+        const usu = await tx.usuario.findFirst({ where: { codUsu: dados.codUsuResp, ativo: 'S' } });
+        if (!usu) throw new BadRequestException('Usuário inexistente neste tenant');
+      }
+      await tx.vaga.update({ where: { codVag: vaga.codVag }, data: { codUsuResp: dados.codUsuResp, codUsuAlt: req.usuario.codUsu } });
+      return { codVag: vaga.codVag, codUsuResp: dados.codUsuResp };
     });
   }
 

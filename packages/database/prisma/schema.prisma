@@ -262,6 +262,7 @@ model Usuario {
   funcionario Funcionario?   @relation(fields: [codFun], references: [codFun])
   papeis      UsuarioPapel[]
   sessoes     Sessao[]
+  vagasResp   Vaga[]         @relation("VagaResponsavel")
 
   @@unique([codTen, email])
   @@map("TSIUSU")
@@ -486,6 +487,8 @@ model Vaga {
   tipoContrato  String?   @map("TIPOCONTRATO")
   codDep        BigInt?   @map("CODDEP")
   codCar        BigInt?   @map("CODCAR")
+  /// Recrutador responsável pela vaga (RN-REC-012) — FK p/ TSIUSU, nulo = sem dono definido.
+  codUsuResp    BigInt?   @map("CODUSURESP")
   /// Perfil cultural ideal da vaga p/ match determinístico (RN-REC-006) — {autonomy,pace,collaboration,structure,dataDriven,directCommunication}, escala 1-5.
   perfilCulturalIdealJson  Json?     @map("PERFILCULTURALIDEALJSON")
   dhInc         DateTime  @default(now()) @map("DHINC")
@@ -498,6 +501,7 @@ model Vaga {
   empresa      Empresa       @relation(fields: [codEmp], references: [codEmp])
   departamento Departamento? @relation(fields: [codDep], references: [codDep])
   cargo        Cargo?        @relation(fields: [codCar], references: [codCar])
+  responsavel  Usuario?      @relation("VagaResponsavel", fields: [codUsuResp], references: [codUsu])
   requisitos   VagaRequisito[]
   perguntas    VagaPergunta[]
   canais       VagaCanal[]

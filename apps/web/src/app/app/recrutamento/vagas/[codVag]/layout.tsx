@@ -12,6 +12,7 @@ interface VagaHub {
   titulo: string;
   status: string;
   local: string | null;
+  responsavel: { codUsu: string; nomeUsu: string } | null;
   perguntas: { codVagPer: string; pergunta: string }[];
   requisitos: { codVagReq: string; descrReq: string; nivelEsperado: number | null; tempoEspMeses: number | null }[];
   kpis: {
@@ -48,6 +49,7 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
   const pathname = usePathname();
   const rotear = useRouter();
   const [vaga, setVaga] = useState<VagaHub | null>(null);
+  const [usuarios, setUsuarios] = useState<{ codUsu: string; nomeUsu: string }[]>([]);
   const [novaAberta, setNovaAberta] = useState(false);
   const [recarregarToken, setRecarregarToken] = useState(0);
   const pedirRecarga = useCallback(() => setRecarregarToken((t) => t + 1), []);
@@ -58,6 +60,15 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
   }, [codVag]);
 
   useEffect(() => { void carregarVaga(); }, [carregarVaga, recarregarToken]);
+  useEffect(() => {
+    void api<{ codUsu: string; nomeUsu: string }[]>("/usuarios").then((r) => { if (r.status === 200 && r.json) setUsuarios(r.json); });
+  }, []);
+
+  async function atribuirResponsavel(codUsuResp: string | null) {
+    const r = await api(`/vagas/${codVag}/responsavel`, { metodo: "PATCH", corpo: { codUsuResp } });
+    if (r.status !== 200) { alert("Não foi possível atribuir o responsável."); return; }
+    await carregarVaga();
+  }
 
   async function transicionar(acao: string) {
     const r = await api(`/vagas/${codVag}/status`, { metodo: "PATCH", corpo: { acao } });
@@ -93,8 +104,19 @@ export default function LayoutCentralVaga({ children }: { children: ReactNode })
               <h1 style={{ fontSize: 22, fontWeight: 600, margin: 0 }}>{vaga.titulo}</h1>
               <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, background: cor.fundo, color: cor.texto }}>{cor.rotulo}</span>
             </div>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
-              {[vaga.local, `${k.totalCandidatos} candidato(s)`, `${k.diasEmAberto} dia(s) em aberto`].filter(Boolean).join(" · ")}
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>{[vaga.local, `${k.totalCandidatos} candidato(s)`, `${k.diasEmAberto} dia(s) em aberto`].filter(Boolean).join(" · ")}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                · Responsável:
+                <select
+                  value={vaga.responsavel?.codUsu ?? ""}
+                  onChange={(e) => atribuirResponsavel(e.target.value || null)}
+                  style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", color: "var(--text-body)", font: "inherit", fontSize: 12 }}
+                >
+                  <option value="">— sem responsável —</option>
+                  {usuarios.map((u) => <option key={u.codUsu} value={u.codUsu}>{u.nomeUsu}</option>)}
+                </select>
+              </span>
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

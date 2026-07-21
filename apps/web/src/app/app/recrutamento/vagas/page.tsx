@@ -16,6 +16,7 @@ interface Vaga {
   empresa: { nomeFantasia: string };
   departamento: { descrDep: string } | null;
   cargo: { nomeCar: string } | null;
+  responsavel: { codUsu: string; nomeUsu: string } | null;
   totalCandidatos: number;
   novos: number;
   altaAderencia: number;
@@ -312,7 +313,7 @@ export default function PaginaVagas() {
                   <td style={{ ...celula, color: "var(--text-muted)", fontSize: 13 }}>
                     {[v.departamento?.descrDep, v.local].filter(Boolean).join(" · ") || "—"}
                   </td>
-                  <td style={{ ...celula, color: "var(--text-muted)" }}>—</td>
+                  <td style={{ ...celula, color: v.responsavel ? "var(--text-body)" : "var(--text-muted)", fontSize: 13 }}>{v.responsavel?.nomeUsu ?? "—"}</td>
                   <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{v.totalCandidatos}</td>
                   <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums", color: v.novos > 0 ? "var(--text-body)" : "var(--text-muted)" }}>{v.novos}</td>
                   <td style={{ ...celula, textAlign: "right", fontVariantNumeric: "tabular-nums", color: v.altaAderencia > 0 ? "var(--green-700, #1D533B)" : "var(--text-muted)", fontWeight: v.altaAderencia > 0 ? 600 : 400 }}>{v.altaAderencia}</td>
