@@ -7,7 +7,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests",
+    "test": "jest",
     "smoke:core": "node scripts/fumaca-core.mjs"
   },
   "dependencies": {

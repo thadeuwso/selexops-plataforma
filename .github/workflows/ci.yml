@@ -27,6 +27,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Testes unitários dos motores de cálculo (match e comportamental)
+        run: pnpm --filter @selexops/api test
+
       - name: Validar schema Prisma
         run: pnpm --filter @selx/database db:validate
         env:
