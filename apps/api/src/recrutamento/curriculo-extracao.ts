@@ -5,8 +5,10 @@
  * fica para uma fase futura (via AI Gateway, purpose recrutamento.*).
  */
 import mammoth from 'mammoth';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
+// `pdf-parse` é CommonJS sem tipos publicados; com esModuleInterop o default
+// import resolve para o próprio módulo, então a asserção de tipo fica aqui.
+import pdfParseImport from 'pdf-parse';
+const pdfParse = pdfParseImport as unknown as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
 
 export type ArquivoRecebido = { nomeArquivo: string; mimetype: string; buffer: Buffer };
 export type StatusExtracao = 'ok' | 'sem_texto' | 'erro';

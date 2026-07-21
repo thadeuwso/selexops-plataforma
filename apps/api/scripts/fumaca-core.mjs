@@ -25,7 +25,9 @@ async function http(metodo, rota, corpo, token) {
   let json = null;
   try {
     json = await res.json();
-  } catch {}
+  } catch {
+    // Rota sem corpo JSON (204, download de arquivo) — o status já basta.
+  }
   return { status: res.status, json };
 }
 
@@ -406,8 +408,8 @@ const uploadRes = await fetch(`${base}/candidatos/${candDiana.json?.codCand}/cur
 const uploadJson = await uploadRes.json().catch(() => null);
 verificar("upload de currículo extrai texto (201)", uploadRes.status === 201 && uploadJson?.statusExtracao === "ok");
 
-const candidatosLista = await http("GET", "/candidatos", null, tokenA2);
-const diana = candidatosLista.json?.find((c) => c.codCand === candDiana.json?.codCand);
+const candidatosLista = await http("GET", `/candidatos?busca=Diana`, null, tokenA2);
+const diana = candidatosLista.json?.itens?.find((c) => c.codCand === candDiana.json?.codCand);
 verificar("telefone prefill a partir do currículo (heurística)", diana?.fone === "(31) 98877-6655");
 
 const curriculosLista = await http("GET", `/candidatos/${candDiana.json?.codCand}/curriculo`, null, tokenA2);
@@ -1019,6 +1021,36 @@ verificar("remove responsável (null) limpa o campo", limpaResp.status === 200 &
 const respOutroTenant = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: meuUsuario?.codUsu }, tokenB);
 verificar("tenant B não atribui responsável em vaga do tenant A → 400", respOutroTenant.status === 400);
 
+// 26b. Banco de talentos paginado e buscado no servidor
+const talentos1 = await http("GET", "/candidatos?pagina=1&tamanhoPagina=3", null, tokenA2);
+verificar(
+  "banco de talentos responde paginado {itens,total,pagina,tamanhoPagina}",
+  talentos1.status === 200 && Array.isArray(talentos1.json?.itens) &&
+    talentos1.json.itens.length === 3 && talentos1.json.total > 3,
+);
+const talentos2 = await http("GET", "/candidatos?pagina=2&tamanhoPagina=3", null, tokenA2);
+const idsP1 = talentos1.json.itens.map((c) => c.codCand);
+verificar(
+  "página 2 traz candidatos diferentes da página 1 (sem repetir nem pular)",
+  talentos2.json?.itens?.length === 3 && talentos2.json.itens.every((c) => !idsP1.includes(c.codCand)) &&
+    talentos2.json.total === talentos1.json.total,
+);
+// A busca precisa rodar no banco: filtrando no navegador, só acharia quem
+// estivesse na página carregada.
+const buscaTalento = await http("GET", "/candidatos?busca=Diana", null, tokenA2);
+verificar(
+  "busca por nome filtra no servidor e reduz o total",
+  buscaTalento.json?.total < talentos1.json.total &&
+    buscaTalento.json.itens.every((c) => c.nomeCand.includes("Diana")),
+);
+const buscaCidade = await http("GET", "/candidatos?busca=uberl", null, tokenA2);
+verificar(
+  "busca é insensível a caixa e acha por cidade, não só por nome",
+  buscaCidade.json?.total >= 1 && buscaCidade.json.itens.some((c) => c.cidade === "Uberlândia"),
+);
+const talentosB = await http("GET", "/candidatos?busca=Diana", null, tokenB);
+verificar("tenant B não encontra candidato do tenant A na busca", talentosB.json?.total === 0);
+
 // 27a. Importação de currículos em lote
 const vagaLote = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Importação Lote" }, tokenA2);
 await http("PATCH", `/vagas/${vagaLote.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
@@ -1059,8 +1091,8 @@ verificar(
   "nome é deduzido do currículo (heurística, sem IA)",
   lote?.itens?.find((i) => i.arquivo === "rafael.txt")?.nomeCand === "Rafael Moreira Lima",
 );
-const dianaDepois = (await http("GET", "/candidatos", null, tokenA2)).json
-  ?.find((c) => c.codCand === candDiana.json?.codCand);
+const dianaDepois = (await http("GET", "/candidatos?busca=Diana", null, tokenA2)).json
+  ?.itens?.find((c) => c.codCand === candDiana.json?.codCand);
 verificar(
   "candidato já existente não tem o nome sobrescrito pelo palpite do lote",
   dianaDepois?.nomeCand === "Diana Rocha",

@@ -28,6 +28,13 @@ const ORDENACOES = ['prioridade', 'aderencia_desc', 'aderencia_asc', 'recentes',
  */
 const ETAPAS_FUNIL = ['applied', 'screening', 'analysis', 'shortlist', 'interview', 'offer', 'hired'] as const;
 
+/** Lista do banco de talentos — busca em nome/e-mail/cidade, paginada no servidor. */
+const esquemaListaCandidatos = z.object({
+  pagina: z.coerce.number().int().min(1).default(1),
+  tamanhoPagina: z.coerce.number().int().min(1).max(200).default(50),
+  busca: z.string().optional(),
+});
+
 const arredondar = (n: number) => Math.round(n * 10) / 10;
 const percentual = (parte: number, total: number) => (total === 0 ? null : arredondar((parte * 100) / total));
 
@@ -333,28 +340,62 @@ export class CandidatosController {
   }
 
   // ===== Banco de talentos =====
+  /**
+   * Banco de talentos, paginado e buscado no servidor.
+   *
+   * Antes devolvia a tabela inteira e o filtro era feito no navegador: o mesmo
+   * problema de escala já corrigido na lista de candidaturas da vaga, que aqui
+   * tinha passado batido. Com alguns milhares de talentos a tela travava e a
+   * resposta carregava, junto, todas as candidaturas de cada um.
+   *
+   * Resposta em `{itens, total, pagina, tamanhoPagina}` — mesmo formato de
+   * `GET /vagas/:codVag/candidaturas`, para haver um só contrato de lista.
+   */
   @Get('candidatos')
   @Permissoes('recrutamento.candidatos.ler')
-  listarCandidatos(@Req() req: ReqAut) {
-    return this.prisma.executarNoTenant(req.usuario.codTen, (tx) =>
-      tx.candidato.findMany({
-        where: { ativo: 'S' },
-        orderBy: { codCand: 'desc' },
-        select: {
-          codCand: true,
-          nomeCand: true,
-          email: true,
-          fone: true,
-          cidade: true,
-          dhInc: true,
-          candidaturas: {
-            where: { ativo: 'S' },
-            orderBy: { codCdt: 'desc' },
-            select: { codCdt: true, estagio: true, vaga: { select: { codVag: true, titulo: true } } },
+  async listarCandidatos(@Req() req: ReqAut, @Query() consulta: unknown) {
+    const { pagina, tamanhoPagina, busca } = validar(esquemaListaCandidatos, consulta);
+    const termo = busca?.trim();
+
+    const where: Prisma.CandidatoWhereInput = {
+      ativo: 'S',
+      ...(termo
+        ? {
+            OR: [
+              { nomeCand: { contains: termo, mode: 'insensitive' as const } },
+              { email: { contains: termo, mode: 'insensitive' as const } },
+              { cidade: { contains: termo, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const [total, itens] = await Promise.all([
+        tx.candidato.count({ where }),
+        tx.candidato.findMany({
+          where,
+          orderBy: { codCand: 'desc' },
+          skip: (pagina - 1) * tamanhoPagina,
+          take: tamanhoPagina,
+          select: {
+            codCand: true,
+            nomeCand: true,
+            email: true,
+            fone: true,
+            cidade: true,
+            cargoAtual: true,
+            dhInc: true,
+            candidaturas: {
+              where: { ativo: 'S' },
+              orderBy: { codCdt: 'desc' },
+              select: { codCdt: true, estagio: true, vaga: { select: { codVag: true, titulo: true } } },
+            },
           },
-        },
-      }),
-    );
+        }),
+      ]);
+      return { itens, total, pagina, tamanhoPagina };
+    });
   }
 
   /** Cadastro rápido com dedup por e-mail/CPF (RN-REC-009). */

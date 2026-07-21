@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../auth/autenticacao.guard';

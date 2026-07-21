@@ -19,6 +19,14 @@ interface Canal {
   tipoCanal: string;
   vlrCustoMes: string | null;
 }
+interface PaginaCandidatos {
+  itens: Candidato[];
+  total: number;
+  pagina: number;
+  tamanhoPagina: number;
+}
+
+const TAMANHO_PAGINA = 50;
 
 interface KpiCanal {
   codCanal: string;
@@ -71,6 +79,36 @@ const ROTULO_ESTAGIO: Record<string, string> = {
   not_selected: "Não selecionado", rejected: "Rejeitado", approved: "Aprovado", archived: "Arquivado",
 };
 
+function BotaoPaginacao({
+  aoClicar,
+  desabilitado,
+  children,
+}: {
+  aoClicar: () => void;
+  desabilitado: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={aoClicar}
+      disabled={desabilitado}
+      style={{
+        padding: "5px 12px",
+        border: "1px solid var(--border-default)",
+        borderRadius: 6,
+        background: "var(--surface-default)",
+        color: desabilitado ? "var(--text-muted)" : "var(--text-body)",
+        font: "inherit",
+        fontSize: 13,
+        cursor: desabilitado ? "default" : "pointer",
+        opacity: desabilitado ? 0.5 : 1,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Aba({ ativa, aoClicar, children }: { ativa: boolean; aoClicar: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -110,15 +148,29 @@ export default function PaginaCandidatos() {
   const [salvando, setSalvando] = useState(false);
   const [deduplicado, setDeduplicado] = useState(false);
   const [busca, setBusca] = useState("");
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [carregando, setCarregando] = useState(true);
   const [expandido, setExpandido] = useState<string | null>(null);
   const [form, setForm] = useState({ nomeCand: "", email: "", fone: "", cgc: "", cidade: "" });
   const [formCanal, setFormCanal] = useState({ nomeCanal: "", tipoCanal: "manual", vlrCustoMes: "" });
 
   const carregar = useCallback(async () => {
-    const [r, c] = await Promise.all([api<Candidato[]>("/candidatos"), api<Canal[]>("/canais")]);
-    if (r.status === 200 && r.json) setLista(r.json);
+    setCarregando(true);
+    const params = new URLSearchParams({ pagina: String(pagina), tamanhoPagina: String(TAMANHO_PAGINA) });
+    if (buscaAplicada) params.set("busca", buscaAplicada);
+    const [r, c] = await Promise.all([
+      api<PaginaCandidatos>(`/candidatos?${params}`),
+      api<Canal[]>("/canais"),
+    ]);
+    if (r.status === 200 && r.json) {
+      setLista(r.json.itens);
+      setTotal(r.json.total);
+    }
     if (c.status === 200 && c.json) setCanais(c.json);
-  }, []);
+    setCarregando(false);
+  }, [pagina, buscaAplicada]);
 
   // Os KPIs recarregam sozinhos quando a janela muda; ficam fora do `carregar`
   // pra não refazer a lista de candidatos a cada troca de período.
@@ -130,6 +182,17 @@ export default function PaginaCandidatos() {
   useEffect(() => {
     if (aba === "canais") void carregarKpis();
   }, [aba, carregarKpis]);
+
+  // A busca agora vai ao servidor: sem o atraso, cada tecla vira uma consulta.
+  // Trocar o termo sempre volta para a primeira página — senão a pessoa busca
+  // algo com 3 resultados estando na página 4 e vê uma lista vazia.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setBuscaAplicada(busca.trim());
+      setPagina(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [busca]);
 
   useEffect(() => {
     if (!abertaLote) return;
@@ -221,15 +284,9 @@ export default function PaginaCandidatos() {
     await carregar();
   }
 
-  const termoBusca = busca.trim().toLowerCase();
-  const listaFiltrada = termoBusca
-    ? lista.filter(
-        (c) =>
-          c.nomeCand.toLowerCase().includes(termoBusca) ||
-          c.email.toLowerCase().includes(termoBusca) ||
-          (c.cidade ?? "").toLowerCase().includes(termoBusca),
-      )
-    : lista;
+  const totalPaginas = Math.max(1, Math.ceil(total / TAMANHO_PAGINA));
+  const primeiroDaPagina = total === 0 ? 0 : (pagina - 1) * TAMANHO_PAGINA + 1;
+  const ultimoDaPagina = Math.min(pagina * TAMANHO_PAGINA, total);
 
   return (
     <main style={{ padding: 32 }}>
@@ -237,7 +294,7 @@ export default function PaginaCandidatos() {
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Recrutamento</h1>
         <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-default)", marginTop: 16 }}>
           <Aba ativa={aba === "candidatos"} aoClicar={() => setAba("candidatos")}>
-            Banco de talentos ({lista.length})
+            Banco de talentos ({total})
           </Aba>
           <Aba ativa={aba === "canais"} aoClicar={() => setAba("canais")}>
             Canais de captação ({canais.length})
@@ -296,7 +353,7 @@ export default function PaginaCandidatos() {
             </tr>
           </thead>
           <tbody>
-            {listaFiltrada.map((c) => (
+            {lista.map((c) => (
               <Fragment key={c.codCand}>
                 <tr
                   onClick={() => c.candidaturas.length > 0 && setExpandido(expandido === c.codCand ? null : c.codCand)}
@@ -329,16 +386,53 @@ export default function PaginaCandidatos() {
                 )}
               </Fragment>
             ))}
-            {listaFiltrada.length === 0 && (
+            {lista.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ padding: 24, color: "var(--text-muted)", textAlign: "center" }}>
-                  {lista.length === 0 ? "Nenhum candidato ainda." : "Nenhum candidato encontrado para essa busca."}
+                  {carregando
+                    ? "Carregando…"
+                    : buscaAplicada
+                      ? "Nenhum candidato encontrado para essa busca."
+                      : "Nenhum candidato ainda."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {total > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            fontSize: 13,
+            color: "var(--text-muted)",
+          }}
+        >
+          <span>
+            {primeiroDaPagina}–{ultimoDaPagina} de {total}
+            {buscaAplicada && " (filtrado)"}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <BotaoPaginacao aoClicar={() => setPagina((p) => p - 1)} desabilitado={pagina <= 1 || carregando}>
+              ← Anterior
+            </BotaoPaginacao>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              Página {pagina} de {totalPaginas}
+            </span>
+            <BotaoPaginacao
+              aoClicar={() => setPagina((p) => p + 1)}
+              desabilitado={pagina >= totalPaginas || carregando}
+            >
+              Próxima →
+            </BotaoPaginacao>
+          </div>
+        </div>
+      )}
       </section>
       )}
 

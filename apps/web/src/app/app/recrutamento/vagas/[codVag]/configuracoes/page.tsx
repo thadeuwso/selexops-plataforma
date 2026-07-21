@@ -3,7 +3,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Selecao, Abas } from "@/componentes/formulario";
-import { PerfilComportamentalForm, estadoInicialFatores, type PerfilFormState } from "@/componentes/perfil-comportamental-form";
+import { PerfilComportamentalForm, estadoInicialFatores } from "@/componentes/perfil-comportamental-form";
 
 const DIMENSOES_CULTURA = [
   { chave: "autonomy", rotulo: "Autonomia" },

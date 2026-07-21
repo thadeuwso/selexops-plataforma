@@ -8,7 +8,8 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "smoke:core": "node scripts/fumaca-core.mjs"
+    "smoke:core": "node scripts/fumaca-core.mjs",
+    "lint": "eslint src scripts --max-warnings 0"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

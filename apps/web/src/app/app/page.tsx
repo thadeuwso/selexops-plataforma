@@ -47,7 +47,7 @@ export default function PaginaDashboard() {
   const [eu, setEu] = useState<Eu | null>(null);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [vagas, setVagas] = useState<Vaga[]>([]);
-  const [candidatos, setCandidatos] = useState<unknown[]>([]);
+  const [totalCandidatos, setTotalCandidatos] = useState(0);
   const [admissoes, setAdmissoes] = useState<ProcessoAdmissao[]>([]);
   const [assinaturas, setAssinaturas] = useState<Assinatura[]>([]);
 
@@ -63,13 +63,15 @@ export default function PaginaDashboard() {
       const [f, v, c, a, s] = await Promise.all([
         api<Funcionario[]>("/funcionarios"),
         api<Vaga[]>("/vagas"),
-        api<unknown[]>("/candidatos"),
+        // Só o total interessa aqui — `tamanhoPagina=1` evita baixar o banco de
+        // talentos inteiro (com as candidaturas de cada um) para exibir um número.
+        api<{ total: number }>("/candidatos?tamanhoPagina=1"),
         api<ProcessoAdmissao[]>("/admissoes"),
         api<Assinatura[]>("/assinaturas"),
       ]);
       if (f.status === 200 && f.json) setFuncionarios(f.json);
       if (v.status === 200 && v.json) setVagas(v.json);
-      if (c.status === 200 && c.json) setCandidatos(c.json);
+      if (c.status === 200 && c.json) setTotalCandidatos(c.json.total);
       if (a.status === 200 && a.json) setAdmissoes(a.json);
       if (s.status === 200 && s.json) setAssinaturas(s.json);
     })();
@@ -96,7 +98,7 @@ export default function PaginaDashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
         <CardKpi rotulo="Funcionários ativos" valor={funcionariosAtivos} />
         <CardKpi rotulo="Vagas abertas" valor={vagasAbertas} />
-        <CardKpi rotulo="Candidatos no banco de talentos" valor={candidatos.length} />
+        <CardKpi rotulo="Candidatos no banco de talentos" valor={totalCandidatos} />
         <CardKpi rotulo="Processos de admissão em andamento" valor={admissoesEmAndamento} />
       </div>
 

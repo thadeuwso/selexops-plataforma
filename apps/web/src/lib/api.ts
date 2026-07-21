@@ -109,6 +109,9 @@ export async function api<T = unknown>(
   let json: T | null = null;
   try {
     json = (await res.json()) as T;
-  } catch {}
+  } catch {
+    // Resposta sem corpo JSON (204, HTML de erro de proxy) não é falha aqui —
+    // quem chama decide o que fazer olhando o status.
+  }
   return { status: res.status, json };
 }

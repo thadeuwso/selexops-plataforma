@@ -27,6 +27,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Até 2026-07-21 o único lint de TypeScript era `next lint`, que em Next 15
+      # abre um assistente interativo e falha sempre — na prática, nunca rodou.
+      - name: Lint (ESLint)
+        run: pnpm lint
+
       - name: Testes unitários dos motores de cálculo (match e comportamental)
         run: pnpm --filter @selexops/api test
 
