@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { api, BASE } from "@/lib/api";
+import { api, fetchAutenticado } from "@/lib/api";
 import { Abas, Gaveta } from "./formulario";
 
 const DIMENSOES_CULTURA = [
@@ -179,10 +179,7 @@ function destacarTermos(texto: string, termos: string[]) {
 }
 
 async function baixarArquivo(codCand: string, codCandCv: string) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-  const res = await fetch(`${BASE}/candidatos/${codCand}/curriculo/${codCandCv}/arquivo`, {
-    headers: token ? { authorization: `Bearer ${token}` } : {},
-  });
+  const res = await fetchAutenticado(`/candidatos/${codCand}/curriculo/${codCandCv}/arquivo`);
   if (!res.ok) {
     alert("Não foi possível abrir o arquivo.");
     return;
@@ -283,10 +280,9 @@ export function CandidatoDrawer({
     setEnviandoCv(true);
     const form = new FormData();
     form.set("arquivo", arquivo);
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    const res = await fetch(`${BASE}/candidatos/${detalhe.candidato.codCand}/curriculo`, {
+    // FormData define seu próprio content-type (com boundary) — não sobrescrever.
+    const res = await fetchAutenticado(`/candidatos/${detalhe.candidato.codCand}/curriculo`, {
       method: "POST",
-      headers: token ? { authorization: `Bearer ${token}` } : {},
       body: form,
     });
     setEnviandoCv(false);
