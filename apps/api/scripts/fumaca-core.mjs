@@ -1019,6 +1019,52 @@ verificar("remove responsável (null) limpa o campo", limpaResp.status === 200 &
 const respOutroTenant = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: meuUsuario?.codUsu }, tokenB);
 verificar("tenant B não atribui responsável em vaga do tenant A → 400", respOutroTenant.status === 400);
 
+// 28. Banco de perguntas e questionário próprio do tenant (RN-GP-001)
+const bancoPerguntas = await http("GET", "/gestao-pessoas/perguntas", null, tokenA2);
+verificar(
+  "banco de perguntas expõe os 4 fatores com suas perguntas",
+  bancoPerguntas.status === 200 && bancoPerguntas.json?.length === 4 &&
+    bancoPerguntas.json.every((f) => f.perguntas.length > 0),
+);
+
+const todasPerguntas = bancoPerguntas.json.flatMap((f) => f.perguntas.map((p) => p.codPer));
+const soUmFator = bancoPerguntas.json[0].perguntas.map((p) => p.codPer);
+const modeloIncompleto = await http("POST", "/gestao-pessoas/modelos", { nome: "Só um fator", codPerguntas: soUmFator }, tokenA2);
+verificar(
+  "questionário sem cobrir todos os fatores é recusado → 400",
+  modeloIncompleto.status === 400,
+);
+
+const modeloProprio = await http("POST", "/gestao-pessoas/modelos", { nome: "Questionário do Tenant A", codPerguntas: todasPerguntas }, tokenA2);
+verificar("cria questionário próprio do tenant (201)", modeloProprio.status === 201 && modeloProprio.json?.qtdPerguntas === 64);
+
+// O ponto crítico: TGPMOD é tabela global — o questionário de A não pode virar o padrão de B.
+const modelosB = await http("GET", "/gestao-pessoas/modelos", null, tokenB);
+verificar(
+  "tenant B não enxerga o questionário do tenant A (só o da plataforma)",
+  modelosB.status === 200 && !modelosB.json?.some((m) => m.codMod === modeloProprio.json?.codMod),
+);
+
+const vagaIsol = await http("POST", "/vagas", { codEmp: cadB.json?.codEmp, titulo: "Vaga Isolamento" }, tokenB);
+await http("PATCH", `/vagas/${vagaIsol.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenB);
+await http("PATCH", `/vagas/${vagaIsol.json?.codVag}/status`, { acao: "aprovar" }, tokenB);
+const canalB = await http("POST", "/canais", { nomeCanal: "Canal B" }, tokenB);
+const cdtIsol = await http("POST", `/vagas/${vagaIsol.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Isolado", email: `isolado.${rodada}@mail.com` }, codCanal: canalB.json?.codCanal,
+}, tokenB);
+const convIsol = await http("POST", `/candidaturas/${cdtIsol.json?.codCdt}/avaliacao-comportamental/convidar`, {}, tokenB);
+const consultaIsol = await http("GET", `/avaliacao-comportamental/publico/${convIsol.json?.tokenPub}`);
+verificar(
+  "convite do tenant B continua usando o questionário da plataforma (48), não o de A (64)",
+  consultaIsol.json?.totalPerguntas === 48,
+);
+
+const modelosA = await http("GET", "/gestao-pessoas/modelos", null, tokenA2);
+verificar(
+  "tenant A enxerga o da plataforma + o próprio",
+  modelosA.json?.some((m) => m.codTen === null) && modelosA.json?.some((m) => m.codMod === modeloProprio.json?.codMod),
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

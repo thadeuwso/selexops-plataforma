@@ -36,7 +36,13 @@ export class AvaliacaoComportamentalController {
       const perfilVaga = cdt.vaga.perfisComportamentais[0];
       const codMod =
         perfilVaga?.codMod ??
-        (await tx.modeloAvaliacaoComportamental.findFirst({ where: { status: 'PUBLICADO' }, orderBy: { versao: 'desc' } }))?.codMod;
+        (
+          await tx.modeloAvaliacaoComportamental.findFirst({
+            // Questionário próprio do tenant tem prioridade; se não houver, cai no da plataforma.
+            where: { status: 'PUBLICADO', OR: [{ codTen: req.usuario.codTen }, { codTen: null }] },
+            orderBy: [{ codTen: 'desc' }, { versao: 'desc' }],
+          })
+        )?.codMod;
       if (!codMod) throw new BadRequestException('Nenhum modelo de avaliação comportamental disponível');
 
       const dhExpiracao = new Date();

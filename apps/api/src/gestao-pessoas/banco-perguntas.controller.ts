@@ -61,14 +61,21 @@ export class BancoPerguntasController {
     }));
   }
 
-  /** Modelos disponíveis; o publicado de maior versão é o padrão usado nos convites. */
+  /**
+   * Questionários visíveis ao tenant: os da plataforma (`codTen` null) mais os
+   * próprios. `TGPMOD` é uma tabela global sem RLS, então o escopo por tenant é
+   * responsabilidade da consulta — sem isso um tenant enxerga (e vira padrão
+   * de) todos os outros.
+   */
   @Get('modelos')
   @Permissoes('gestaopessoas.avaliacoes.ler')
-  async listarModelos() {
+  async listarModelos(@Req() req: ReqAut) {
     return this.prisma.admin.modeloAvaliacaoComportamental.findMany({
-      orderBy: [{ status: 'asc' }, { versao: 'desc' }],
+      where: { OR: [{ codTen: req.usuario.codTen }, { codTen: null }] },
+      orderBy: [{ codTen: 'desc' }, { versao: 'desc' }],
       select: {
         codMod: true,
+        codTen: true,
         nome: true,
         versao: true,
         status: true,
@@ -80,12 +87,12 @@ export class BancoPerguntasController {
     });
   }
 
-  /** Detalhe do modelo com as perguntas escolhidas, na ordem. */
+  /** Detalhe do questionário com as perguntas escolhidas, na ordem. */
   @Get('modelos/:codMod')
   @Permissoes('gestaopessoas.avaliacoes.ler')
-  async detalharModelo(@Param('codMod') codMod: string) {
-    const modelo = await this.prisma.admin.modeloAvaliacaoComportamental.findUnique({
-      where: { codMod: BigInt(codMod) },
+  async detalharModelo(@Req() req: ReqAut, @Param('codMod') codMod: string) {
+    const modelo = await this.prisma.admin.modeloAvaliacaoComportamental.findFirst({
+      where: { codMod: BigInt(codMod), OR: [{ codTen: req.usuario.codTen }, { codTen: null }] },
       include: {
         perguntas: {
           orderBy: { ordem: 'asc' },
@@ -98,10 +105,10 @@ export class BancoPerguntasController {
   }
 
   /**
-   * Cria um modelo novo já publicado, virando o padrão dos próximos convites
-   * (a busca do padrão usa `status: PUBLICADO` ordenado por versão desc).
-   * Nunca altera um modelo existente: resultados já calculados guardam
-   * `versaoMod` e não podem ter o questionário mudado debaixo deles (RN-GP-007).
+   * Cria um questionário novo **do tenant** (`codTen` preenchido), já publicado,
+   * virando o padrão dos próximos convites daquele tenant — nunca dos outros.
+   * Nunca altera um existente: resultados já calculados guardam `versaoMod` e
+   * não podem ter o questionário mudado debaixo deles (RN-GP-007).
    */
   @Post('modelos')
   @Permissoes('gestaopessoas.avaliacoes.criar')
@@ -128,7 +135,9 @@ export class BancoPerguntasController {
       );
     }
 
+    // Versão é sequencial dentro do próprio tenant, não global.
     const ultima = await this.prisma.admin.modeloAvaliacaoComportamental.findFirst({
+      where: { codTen: req.usuario.codTen },
       orderBy: { versao: 'desc' },
       select: { versao: true },
     });
@@ -136,6 +145,7 @@ export class BancoPerguntasController {
 
     const modelo = await this.prisma.admin.modeloAvaliacaoComportamental.create({
       data: {
+        codTen: req.usuario.codTen,
         nome: dados.nome,
         versao,
         status: 'PUBLICADO',

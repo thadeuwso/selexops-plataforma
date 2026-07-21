@@ -70,8 +70,9 @@ export class PerfilComportamentalController {
       if (!vaga) throw new BadRequestException('Vaga inexistente neste tenant');
 
       const modeloPadrao = await tx.modeloAvaliacaoComportamental.findFirst({
-        where: { status: 'PUBLICADO' },
-        orderBy: { versao: 'desc' },
+        // Questionário próprio do tenant tem prioridade; se não houver, cai no da plataforma.
+        where: { status: 'PUBLICADO', OR: [{ codTen: req.usuario.codTen }, { codTen: null }] },
+        orderBy: [{ codTen: 'desc' }, { versao: 'desc' }],
       });
       if (!modeloPadrao) throw new BadRequestException('Nenhum modelo de avaliação comportamental publicado');
 

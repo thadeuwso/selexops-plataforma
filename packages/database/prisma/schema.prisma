@@ -805,6 +805,10 @@ model EscalaResposta {
 /// Modelo/questionário de avaliação (ex.: "Avaliação Comportamental Padrão v1"). GLOBAL.
 model ModeloAvaliacaoComportamental {
   codMod   BigInt    @id @default(autoincrement()) @map("CODMOD")
+  /// NULL = catálogo da plataforma (seed, vale para todos); preenchido = questionário
+  /// próprio do tenant. Sem isso, um tenant publicando um modelo virava o padrão
+  /// de TODOS os outros — a tabela é global e o padrão é "publicado de maior versão".
+  codTen   BigInt?   @map("CODTEN")
   nome     String    @map("NOME")
   versao   Int       @default(1) @map("VERSAO")
   status   String    @default("RASCUNHO") @map("STATUS")
