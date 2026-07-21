@@ -204,7 +204,11 @@ export class CandidatosController {
           fone: true,
           cidade: true,
           dhInc: true,
-          _count: { select: { candidaturas: true } },
+          candidaturas: {
+            where: { ativo: 'S' },
+            orderBy: { codCdt: 'desc' },
+            select: { codCdt: true, estagio: true, vaga: { select: { codVag: true, titulo: true } } },
+          },
         },
       }),
     );

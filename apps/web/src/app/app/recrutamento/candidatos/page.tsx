@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
 
@@ -10,7 +11,7 @@ interface Candidato {
   fone: string | null;
   cidade: string | null;
   dhInc: string;
-  _count: { candidaturas: number };
+  candidaturas: { codCdt: string; estagio: string; vaga: { codVag: string; titulo: string } }[];
 }
 interface Canal {
   codCanal: string;
@@ -20,6 +21,12 @@ interface Canal {
 }
 
 const celula: React.CSSProperties = { padding: "10px 14px" };
+
+const ROTULO_ESTAGIO: Record<string, string> = {
+  applied: "Recebidas", screening: "Triagem", analysis: "Análise", shortlist: "Shortlist",
+  interview: "Entrevista", offer: "Proposta", hired: "Contratado", knockout: "Eliminado (triagem)",
+  not_selected: "Não selecionado", rejected: "Rejeitado", approved: "Aprovado", archived: "Arquivado",
+};
 
 function Aba({ ativa, aoClicar, children }: { ativa: boolean; aoClicar: () => void; children: React.ReactNode }) {
   return (
@@ -50,6 +57,8 @@ export default function PaginaCandidatos() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [deduplicado, setDeduplicado] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [expandido, setExpandido] = useState<string | null>(null);
   const [form, setForm] = useState({ nomeCand: "", email: "", fone: "", cgc: "", cidade: "" });
   const [formCanal, setFormCanal] = useState({ nomeCanal: "", tipoCanal: "manual", vlrCustoMes: "" });
 
@@ -114,6 +123,16 @@ export default function PaginaCandidatos() {
     await carregar();
   }
 
+  const termoBusca = busca.trim().toLowerCase();
+  const listaFiltrada = termoBusca
+    ? lista.filter(
+        (c) =>
+          c.nomeCand.toLowerCase().includes(termoBusca) ||
+          c.email.toLowerCase().includes(termoBusca) ||
+          (c.cidade ?? "").toLowerCase().includes(termoBusca),
+      )
+    : lista;
+
   return (
     <main style={{ padding: 32 }}>
       <header style={{ marginBottom: 8 }}>
@@ -136,6 +155,13 @@ export default function PaginaCandidatos() {
         </p>
         <BotaoPrimario onClick={() => setAberta(true)}>Cadastrar candidato</BotaoPrimario>
       </header>
+
+      <Entrada
+        placeholder="Buscar por nome, e-mail ou cidade…"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        style={{ maxWidth: 320, marginBottom: 16 }}
+      />
 
       {deduplicado && (
         <div
@@ -164,19 +190,43 @@ export default function PaginaCandidatos() {
             </tr>
           </thead>
           <tbody>
-            {lista.map((c) => (
-              <tr key={c.codCand} style={{ borderTop: "1px solid var(--border-default)" }}>
-                <td style={celula}>{c.nomeCand}</td>
-                <td style={{ ...celula, color: "var(--text-muted)" }}>{c.email}</td>
-                <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{c.fone ?? "—"}</td>
-                <td style={celula}>{c.cidade ?? "—"}</td>
-                <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{c._count?.candidaturas ?? 0}</td>
-              </tr>
+            {listaFiltrada.map((c) => (
+              <Fragment key={c.codCand}>
+                <tr
+                  onClick={() => c.candidaturas.length > 0 && setExpandido(expandido === c.codCand ? null : c.codCand)}
+                  style={{ borderTop: "1px solid var(--border-default)", cursor: c.candidaturas.length > 0 ? "pointer" : "default" }}
+                >
+                  <td style={celula}>{c.nomeCand}</td>
+                  <td style={{ ...celula, color: "var(--text-muted)" }}>{c.email}</td>
+                  <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>{c.fone ?? "—"}</td>
+                  <td style={celula}>{c.cidade ?? "—"}</td>
+                  <td style={{ ...celula, fontFamily: "var(--font-mono)" }}>
+                    {c.candidaturas.length}
+                    {c.candidaturas.length > 0 && (expandido === c.codCand ? " ▲" : " ▼")}
+                  </td>
+                </tr>
+                {expandido === c.codCand && c.candidaturas.length > 0 && (
+                  <tr key={`${c.codCand}-exp`} style={{ background: "var(--surface-page)" }}>
+                    <td colSpan={5} style={{ padding: "8px 14px 14px" }}>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {c.candidaturas.map((cdt) => (
+                          <div key={cdt.codCdt} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                            <Link href={`/app/recrutamento/vagas/${cdt.vaga.codVag}`} style={{ color: "var(--text-link)" }}>
+                              {cdt.vaga.titulo}
+                            </Link>
+                            <span style={{ color: "var(--text-muted)" }}>{ROTULO_ESTAGIO[cdt.estagio] ?? cdt.estagio}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
-            {lista.length === 0 && (
+            {listaFiltrada.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ padding: 24, color: "var(--text-muted)", textAlign: "center" }}>
-                  Nenhum candidato ainda.
+                  {lista.length === 0 ? "Nenhum candidato ainda." : "Nenhum candidato encontrado para essa busca."}
                 </td>
               </tr>
             )}

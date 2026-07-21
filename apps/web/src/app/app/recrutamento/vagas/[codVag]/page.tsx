@@ -1,6 +1,8 @@
 "use client";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Campo, Entrada, Erro, Gaveta, Selecao } from "@/componentes/formulario";
 import { CandidatoDrawer } from "@/componentes/candidato-drawer";
@@ -136,6 +138,147 @@ const ESTAGIOS_TERMINAIS = [
 const TODOS_ESTAGIOS = [...ESTAGIOS, ...ESTAGIOS_TERMINAIS];
 const rotuloEstagio = (chave: string) => TODOS_ESTAGIOS.find((e) => e.chave === chave)?.rotulo ?? chave;
 
+function CardKanban({
+  c,
+  abrirDrawer,
+  moverEstagio,
+  selecionadosComparar,
+  alternarSelecaoComparar,
+}: {
+  c: Candidatura;
+  abrirDrawer: (codCdt: string) => void;
+  moverEstagio: (codCdt: string, estagio: string) => void;
+  selecionadosComparar: string[];
+  alternarSelecaoComparar: (codCdt: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: c.codCdt });
+  const convite = c.convitesComportamentais[0];
+  const comportamentalConcluido = convite?.sessao?.resultado;
+  const corScore =
+    c.match == null ? null
+    : c.match.scoreGeral >= 75 ? { bg: "var(--green-100, #D6E9DF)", fg: "var(--green-700, #1D533B)" }
+    : c.match.scoreGeral >= 50 ? { bg: "var(--amber-100, #F2E3C4)", fg: "var(--amber-700, #714E08)" }
+    : { bg: "var(--red-100, #F4D9D6)", fg: "var(--red-700, #7A2A25)" };
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      data-codcdt={c.codCdt}
+      onClick={() => abrirDrawer(c.codCdt)}
+      style={{
+        background: "var(--surface-default)",
+        border: "1px solid var(--border-default)",
+        borderRadius: 8,
+        padding: 10,
+        fontSize: 13,
+        cursor: "pointer",
+        touchAction: "none",
+        opacity: isDragging ? 0.4 : 1,
+        transform: transform ? CSS.Translate.toString(transform) : undefined,
+        zIndex: isDragging ? 10 : undefined,
+      }}
+    >
+      <div style={{ fontWeight: 600 }}>{c.candidato.nomeCand}</div>
+      <div style={{ color: "var(--text-muted)", fontSize: 11 }}>via {c.canal.nomeCanal}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+        {corScore && (
+          <span
+            title={`Score de match: ${c.match!.scoreGeral}${c.match!.qtdGapsCrit > 0 ? ` · ${c.match!.qtdGapsCrit} gap(s) crítico(s)` : ""}`}
+            style={{ padding: "2px 7px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: corScore.bg, color: corScore.fg }}
+          >
+            {c.match!.scoreGeral}
+          </span>
+        )}
+        {c.knockoutJson && <span title={`Resposta eliminatória em "${c.knockoutJson.pergunta}"`}>⚠️</span>}
+        {comportamentalConcluido ? (
+          <span title="Avaliação comportamental concluída">
+            🧭 {comportamentalConcluido.aderencias[0]?.aderenciaGeral ?? ""}
+          </span>
+        ) : convite ? (
+          <span title={`Avaliação comportamental: ${ROTULO_STATUS_CONVITE[convite.status] ?? convite.status}`} style={{ opacity: 0.5 }}>
+            🧭
+          </span>
+        ) : null}
+        {comportamentalConcluido && (
+          <label
+            title="Selecionar para comparar"
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: "flex", alignItems: "center", cursor: "pointer", marginLeft: "auto" }}
+          >
+            <input
+              type="checkbox"
+              checked={selecionadosComparar.includes(c.codCdt)}
+              onChange={() => alternarSelecaoComparar(c.codCdt)}
+            />
+          </label>
+        )}
+      </div>
+      <Selecao
+        value={c.estagio}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        onChange={(e) => moverEstagio(c.codCdt, e.target.value)}
+        style={{ marginTop: 8, fontSize: 12, padding: "4px 6px" }}
+      >
+        {TODOS_ESTAGIOS.map((e) => (
+          <option key={e.chave} value={e.chave}>{e.rotulo}</option>
+        ))}
+      </Selecao>
+    </div>
+  );
+}
+
+function ColunaKanban({
+  col,
+  itens,
+  abrirDrawer,
+  moverEstagio,
+  selecionadosComparar,
+  alternarSelecaoComparar,
+}: {
+  col: { chave: string; rotulo: string };
+  itens: Candidatura[];
+  abrirDrawer: (codCdt: string) => void;
+  moverEstagio: (codCdt: string, estagio: string) => void;
+  selecionadosComparar: string[];
+  alternarSelecaoComparar: (codCdt: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: col.chave });
+  return (
+    <div
+      ref={setNodeRef}
+      data-coluna={col.chave}
+      style={{
+        minWidth: 240,
+        background: isOver ? "var(--brand-50, #F2E9E2)" : "var(--surface-page)",
+        border: "1px solid var(--border-default)",
+        borderRadius: 10,
+        padding: 10,
+        flexShrink: 0,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+        {col.rotulo}
+        <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>{itens.length}</span>
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {itens.map((c) => (
+          <CardKanban
+            key={c.codCdt}
+            c={c}
+            abrirDrawer={abrirDrawer}
+            moverEstagio={moverEstagio}
+            selecionadosComparar={selecionadosComparar}
+            alternarSelecaoComparar={alternarSelecaoComparar}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function PipelineVaga() {
   const { codVag } = useParams<{ codVag: string }>();
   const [vaga, setVaga] = useState<Vaga | null>(null);
@@ -193,6 +336,18 @@ export default function PipelineVaga() {
   async function moverEstagio(codCdt: string, estagio: string) {
     await api(`/candidaturas/${codCdt}/estagio`, { metodo: "PATCH", corpo: { estagio } });
     await carregar();
+  }
+
+  const dndSensores = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  function aoTerminarArrastar(evento: DragEndEvent) {
+    const { active, over } = evento;
+    if (!over) return;
+    const codCdt = String(active.id);
+    const novoEstagio = String(over.id);
+    const atual = candidaturas.find((c) => c.codCdt === codCdt)?.estagio;
+    if (atual === novoEstagio) return;
+    void moverEstagio(codCdt, novoEstagio);
   }
 
   function alternarSelecaoComparar(codCdt: string) {
@@ -317,100 +472,21 @@ export default function PipelineVaga() {
         </div>
       </header>
 
-      <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
-        {ESTAGIOS.map((col) => {
-          const itens = candidaturas.filter((c) => c.estagio === col.chave);
-          return (
-            <div
+      <DndContext sensors={dndSensores} onDragEnd={aoTerminarArrastar}>
+        <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
+          {ESTAGIOS.map((col) => (
+            <ColunaKanban
               key={col.chave}
-              style={{
-                minWidth: 240,
-                background: "var(--surface-page)",
-                border: "1px solid var(--border-default)",
-                borderRadius: 10,
-                padding: 10,
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
-                {col.rotulo}
-                <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>{itens.length}</span>
-              </div>
-              <div style={{ display: "grid", gap: 8 }}>
-                {itens.map((c) => {
-                  const convite = c.convitesComportamentais[0];
-                  const comportamentalConcluido = convite?.sessao?.resultado;
-                  const corScore =
-                    c.match == null ? null
-                    : c.match.scoreGeral >= 75 ? { bg: "var(--green-100, #D6E9DF)", fg: "var(--green-700, #1D533B)" }
-                    : c.match.scoreGeral >= 50 ? { bg: "var(--amber-100, #F2E3C4)", fg: "var(--amber-700, #714E08)" }
-                    : { bg: "var(--red-100, #F4D9D6)", fg: "var(--red-700, #7A2A25)" };
-                  return (
-                    <div
-                      key={c.codCdt}
-                      onClick={() => setDrawerCodCdt(c.codCdt)}
-                      style={{
-                        background: "var(--surface-default)",
-                        border: "1px solid var(--border-default)",
-                        borderRadius: 8,
-                        padding: 10,
-                        fontSize: 13,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{c.candidato.nomeCand}</div>
-                      <div style={{ color: "var(--text-muted)", fontSize: 11 }}>via {c.canal.nomeCanal}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                        {corScore && (
-                          <span
-                            title={`Score de match: ${c.match!.scoreGeral}${c.match!.qtdGapsCrit > 0 ? ` · ${c.match!.qtdGapsCrit} gap(s) crítico(s)` : ""}`}
-                            style={{ padding: "2px 7px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: corScore.bg, color: corScore.fg }}
-                          >
-                            {c.match!.scoreGeral}
-                          </span>
-                        )}
-                        {c.knockoutJson && <span title={`Resposta eliminatória em "${c.knockoutJson.pergunta}"`}>⚠️</span>}
-                        {comportamentalConcluido ? (
-                          <span title="Avaliação comportamental concluída">
-                            🧭 {comportamentalConcluido.aderencias[0]?.aderenciaGeral ?? ""}
-                          </span>
-                        ) : convite ? (
-                          <span title={`Avaliação comportamental: ${ROTULO_STATUS_CONVITE[convite.status] ?? convite.status}`} style={{ opacity: 0.5 }}>
-                            🧭
-                          </span>
-                        ) : null}
-                        {comportamentalConcluido && (
-                          <label
-                            title="Selecionar para comparar"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ display: "flex", alignItems: "center", cursor: "pointer", marginLeft: "auto" }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selecionadosComparar.includes(c.codCdt)}
-                              onChange={() => alternarSelecaoComparar(c.codCdt)}
-                            />
-                          </label>
-                        )}
-                      </div>
-                      <Selecao
-                        value={c.estagio}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => moverEstagio(c.codCdt, e.target.value)}
-                        style={{ marginTop: 8, fontSize: 12, padding: "4px 6px" }}
-                      >
-                        {TODOS_ESTAGIOS.map((e) => (
-                          <option key={e.chave} value={e.chave}>{e.rotulo}</option>
-                        ))}
-                      </Selecao>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              col={col}
+              itens={candidaturas.filter((c) => c.estagio === col.chave)}
+              abrirDrawer={setDrawerCodCdt}
+              moverEstagio={moverEstagio}
+              selecionadosComparar={selecionadosComparar}
+              alternarSelecaoComparar={alternarSelecaoComparar}
+            />
+          ))}
+        </div>
+      </DndContext>
 
       {selecionadosComparar.length > 0 && (
         <div
