@@ -21,6 +21,7 @@ interface ProcessoAdmissao {
 interface Assinatura {
   codAssin: string;
   status: string;
+  tokenPub: string;
   documento: { nomeDoc: string };
   funcionario: { nomeFun: string };
 }
@@ -132,21 +133,34 @@ export default function PaginaDashboard() {
             </Link>
           ))}
           {assinaturasPendentes.map((a) => (
-            <Link
+            <div
               key={a.codAssin}
-              href="/app/empresa/funcionarios"
               style={{
-                display: "block",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
                 padding: "10px 12px",
                 borderRadius: 8,
                 border: "1px solid var(--border-default)",
                 color: "var(--text-body)",
-                textDecoration: "none",
                 fontSize: 14,
               }}
             >
-              {a.funcionario.nomeFun} — assinatura de {a.documento.nomeDoc} pendente
-            </Link>
+              <span>
+                {a.funcionario.nomeFun} — assinatura de {a.documento.nomeDoc} pendente
+              </span>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/assinatura/${a.tokenPub}`;
+                  navigator.clipboard.writeText(url).catch(() => {});
+                  alert(`Link de assinatura copiado:\n${url}`);
+                }}
+                style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13, whiteSpace: "nowrap" }}
+              >
+                Copiar link
+              </button>
+            </div>
           ))}
         </div>
       </div>

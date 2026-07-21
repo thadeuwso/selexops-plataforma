@@ -13,6 +13,7 @@ interface Anexo {
 interface Processo {
   codAdmProc: string;
   status: string;
+  tokenPub: string;
   obsAjuste: string | null;
   dadosComplementaresJson: Record<string, unknown> | null;
   dhInicio: string;
@@ -145,6 +146,37 @@ export default function PaginaAdmissaoDetalhe() {
           </div>
         )}
       </header>
+
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          padding: "10px 14px", marginBottom: 20, borderRadius: 8,
+          background: "var(--surface-page)", border: "1px solid var(--border-default)", fontSize: 13,
+        }}
+      >
+        <span style={{ color: "var(--text-muted)" }}>Link do candidato:</span>
+        <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+          /admissao/{processo.tokenPub.slice(0, 10)}…
+        </code>
+        <button
+          onClick={() => {
+            const url = `${window.location.origin}/admissao/${processo.tokenPub}`;
+            navigator.clipboard.writeText(url).catch(() => {});
+            alert(`Link copiado:\n${url}`);
+          }}
+          style={{ border: "none", background: "none", color: "var(--text-link)", cursor: "pointer", font: "inherit", fontSize: 13 }}
+        >
+          Copiar
+        </button>
+        <a
+          href={`/admissao/${processo.tokenPub}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "var(--text-link)", fontSize: 13 }}
+        >
+          Abrir como o candidato vê
+        </a>
+      </div>
 
       {processo.obsAjuste && (
         <div
