@@ -1,5 +1,6 @@
 "use client";
 import { useParams } from "next/navigation";
+import { PortalCandidatoSecoes } from "@/componentes/portal-candidato-secoes";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -157,6 +158,11 @@ export default function AcompanharProcesso() {
             </div>
           </section>
         )}
+
+        {/* Escrita do candidato: dados, currículo e questionário cultural.
+            O portal era só leitura até aqui — quem informava a cultura do
+            candidato era o recrutador, no chute. */}
+        <PortalCandidatoSecoes token={token} />
 
         <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 28, marginBottom: 0 }}>
           Guarde este link: ele é o seu acompanhamento e continua funcionando durante todo o processo.

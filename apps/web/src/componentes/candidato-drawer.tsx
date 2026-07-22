@@ -28,6 +28,7 @@ interface DetalheCandidatura {
     fone: string | null;
     linkedin: string | null;
     perfilCulturalJson: Record<string, number> | null;
+    perfilCulturalOrigem: string | null;
   };
   canal: { nomeCanal: string };
   vaga: {
@@ -45,6 +46,7 @@ interface DetalheCandidatura {
   } | null;
   processoAdmissao: { status: string } | null;
   situacao: SituacaoCandidatura | null;
+  culturaEfetiva: { perfil: Record<string, number> | null; origem: "VAGA" | "EMPRESA" | null } | null;
   requisitosAvaliados: {
     codVagReq: string;
     descrReq: string;
@@ -369,7 +371,9 @@ export function CandidatoDrawer({
                 match={detalhe.match}
                 requisitos={detalhe.requisitosAvaliados}
                 perfilCandidato={detalhe.candidato.perfilCulturalJson}
-                perfilIdeal={detalhe.vaga.perfilCulturalIdealJson}
+                perfilIdeal={(detalhe.culturaEfetiva?.perfil as Record<string, number> | null) ?? detalhe.vaga.perfilCulturalIdealJson}
+                origemCandidato={detalhe.candidato.perfilCulturalOrigem ?? null}
+                origemVaga={detalhe.culturaEfetiva?.origem ?? null}
                 aoIrParaDossie={() => setTab("dossie")}
               />
 

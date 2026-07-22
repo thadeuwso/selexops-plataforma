@@ -165,6 +165,11 @@ async function upsertCandidato(
     },
   });
   if (existente) {
+    // Perfil respondido pelo próprio candidato NÃO é sobrescrito por um valor
+    // digitado no cadastro (RN-REC-014): um é medido, o outro é estimativa, e
+    // deixar a estimativa vencer apagaria o dado melhor sem ninguém perceber.
+    const manterPerfilDoCandidato = existente.perfilCulturalOrigem === 'CANDIDATO';
+    const trocaPerfil = !!perfilCultural && !manterPerfilDoCandidato;
     return {
       candidato: await tx.candidato.update({
         where: { codCand: existente.codCand },
@@ -175,7 +180,13 @@ async function upsertCandidato(
           linkedin: dados.linkedin ?? existente.linkedin,
           cidade: dados.cidade ?? existente.cidade,
           cargoAtual: dados.cargoAtual ?? existente.cargoAtual,
-          perfilCulturalJson: (perfilCultural as Prisma.InputJsonValue) ?? existente.perfilCulturalJson ?? undefined,
+          ...(trocaPerfil
+            ? {
+                perfilCulturalJson: perfilCultural as Prisma.InputJsonValue,
+                perfilCulturalOrigem: 'RECRUTADOR',
+                perfilCulturalDh: new Date(),
+              }
+            : {}),
           codUsuAlt: codUsu,
         },
       }),
@@ -189,6 +200,7 @@ async function upsertCandidato(
         ...dadosBasicos,
         email,
         perfilCulturalJson: perfilCultural as Prisma.InputJsonValue | undefined,
+        ...(perfilCultural ? { perfilCulturalOrigem: 'RECRUTADOR', perfilCulturalDh: new Date() } : {}),
         codUsuInc: codUsu,
       },
     }),
@@ -479,7 +491,16 @@ export class CandidatosController {
 
       // RN-REC-006: match determinístico — calculado uma vez, na criação, sem IA.
       const autoavaliacoes = (dados.autoavaliacao ?? {}) as Record<string, AutoavaliacaoResp>;
-      const perfilIdeal = (vaga.perfilCulturalIdealJson as PerfilCultural | null) ?? null;
+      // Vaga sem cultura própria herda a da empresa (RN-REC-014) — mesmo
+      // fallback do Padrão Comportamental. Sem isso, cadastrar a cultura da
+      // empresa não mudaria nada até alguém preencher vaga por vaga.
+      const culturaEmpresa = await tx.culturaPadraoEmpresa.findFirst({
+        where: { codTen: req.usuario.codTen },
+        select: { perfilJson: true },
+      });
+      const perfilIdeal =
+        (vaga.perfilCulturalIdealJson as PerfilCultural | null) ??
+        ((culturaEmpresa?.perfilJson as PerfilCultural | null) ?? null);
       const perfilCandidato = (candidato.perfilCulturalJson as PerfilCultural | null) ?? null;
       const requisitosScoring = vaga.requisitos.map((r) => ({
         codVagReq: r.codVagReq.toString(),
@@ -641,7 +662,7 @@ export class CandidatosController {
 
       // Situação consolidada: o Resumo precisa responder "em que pé está isto"
       // sem obrigar o recrutador a abrir quatro abas para descobrir.
-      const [convite, analise, ultimaMudanca] = await Promise.all([
+      const [convite, analise, ultimaMudanca, culturaEmpresa] = await Promise.all([
         tx.conviteComportamental.findFirst({
           where: { codCdt: cdt.codCdt },
           orderBy: { codConv: 'desc' },
@@ -657,7 +678,17 @@ export class CandidatosController {
           orderBy: { codCdtHis: 'desc' },
           select: { dhInc: true },
         }),
+        tx.culturaPadraoEmpresa.findFirst({ where: { codTen: req.usuario.codTen }, select: { perfilJson: true } }),
       ]);
+
+      // Qual perfil ideal vale para esta vaga, e de onde veio. Sem dizer a
+      // origem, o recrutador não sabe se está olhando a cultura desta vaga ou
+      // a da empresa inteira.
+      const culturaEfetiva = cdt.vaga.perfilCulturalIdealJson
+        ? { perfil: cdt.vaga.perfilCulturalIdealJson, origem: 'VAGA' as const }
+        : culturaEmpresa
+          ? { perfil: culturaEmpresa.perfilJson, origem: 'EMPRESA' as const }
+          : { perfil: null, origem: null };
 
       const curriculo = cdt.candidato.curriculos[0] ?? null;
       const desde = ultimaMudanca?.dhInc ?? cdt.dhInc;
@@ -714,7 +745,7 @@ export class CandidatosController {
         };
       });
 
-      return { ...cdt, requisitosAvaliados, situacao };
+      return { ...cdt, requisitosAvaliados, situacao, culturaEfetiva };
     });
   }
 

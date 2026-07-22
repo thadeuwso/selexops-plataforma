@@ -23,6 +23,7 @@ const navegacao: GrupoNav[] = [
       { rota: "/app/recrutamento/admissao", rotulo: "Admissão" },
       { rota: "/app/recrutamento/banco-perguntas", rotulo: "Banco de perguntas" },
       { rota: "/app/recrutamento/comportamental-padrao", rotulo: "Padrão Comportamental" },
+      { rota: "/app/recrutamento/cultura-empresa", rotulo: "Cultura da empresa" },
     ],
   },
   {

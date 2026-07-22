@@ -75,6 +75,8 @@ export function ResumoCandidatura({
   requisitos,
   perfilCandidato,
   perfilIdeal,
+  origemCandidato,
+  origemVaga,
   aoIrParaDossie,
 }: {
   estagio: string;
@@ -83,6 +85,8 @@ export function ResumoCandidatura({
   requisitos: RequisitoAvaliado[];
   perfilCandidato: Record<string, number> | null;
   perfilIdeal: Record<string, number> | null;
+  origemCandidato: string | null;
+  origemVaga: "VAGA" | "EMPRESA" | null;
   aoIrParaDossie: () => void;
 }) {
   const comprovados = requisitos.filter((r) => r.evidenciaCurriculo);
@@ -220,14 +224,25 @@ export function ResumoCandidatura({
       {(perfilCandidato || perfilIdeal) && (
         <Bloco
           titulo="Perfil cultural"
-          // Procedência explícita: o número parece medido, mas é estimativa de
-          // quem cadastrou. Sem isso, "Fit cultural 88" passa por objetivo — e
-          // ele pesa no score de contratação.
-          apoio="O perfil do candidato é preenchido à mão pelo recrutador no cadastro da candidatura; o ideal vem das configurações da vaga. Não sai do currículo nem da avaliação comportamental."
+          // Procedência explícita nos dois lados: o mesmo número significa
+          // coisas diferentes se foi respondido pelo candidato ou chutado no
+          // cadastro — e ele pesa 20% no score de contratação.
+          apoio={
+            origemCandidato === "CANDIDATO"
+              ? "Respondido pelo próprio candidato no portal."
+              : origemCandidato === "RECRUTADOR"
+                ? "Preenchido à mão pelo recrutador no cadastro da candidatura — é estimativa, não medida. O candidato pode responder pelo portal e substituir."
+                : "O ideal vem da vaga ou da cultura da empresa; o do candidato, do questionário que ele responde no portal."
+          }
         >
+          {origemVaga && (
+            <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "0 0 8px" }}>
+              Perfil ideal {origemVaga === "VAGA" ? "definido nesta vaga" : "herdado da cultura da empresa"}.
+            </p>
+          )}
           {!perfilCandidato && (
             <p style={{ fontSize: 12, color: "var(--amber-700, #714E08)", margin: "0 0 8px" }}>
-              Ninguém preencheu o perfil cultural deste candidato — por isso não há fit cultural calculado.
+              O candidato ainda não respondeu ao questionário cultural — por isso não há fit cultural calculado.
             </p>
           )}
           <div style={{ display: "grid", gap: 4 }}>

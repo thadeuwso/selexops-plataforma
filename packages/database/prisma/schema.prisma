@@ -56,6 +56,8 @@ model Tenant {
   matchResumos   MatchResumo[]
   iaAnalises     IAAnaliseCandidatura[]
   configIa       ConfiguracaoIa?
+  culturaPadrao  CulturaPadraoEmpresa?
+  respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
   kits           KitAdmissional[]
@@ -608,8 +610,14 @@ model Candidato {
   cidade    String?  @map("CIDADE")
   cargoAtual String? @map("CARGOATUAL")
   codUsu    BigInt?  @map("CODUSU")
-  /// Perfil cultural autoavaliado p/ match determinístico (RN-REC-006) — mesmo formato de Vaga.perfilCulturalIdealJson, reaproveitado entre candidaturas.
+  /// Perfil cultural p/ match determinístico (RN-REC-006) — mesmo formato de Vaga.perfilCulturalIdealJson, reaproveitado entre candidaturas.
   perfilCulturalJson  Json?  @map("PERFILCULTURALJSON")
+  /// De onde veio o perfil: "CANDIDATO" (respondeu o questionário) ou
+  /// "RECRUTADOR" (digitado à mão no cadastro). Nasceu porque as duas origens
+  /// eram indistinguíveis na tela — uma é medida, a outra é palpite, e quem lê
+  /// o fit cultural precisa saber qual está vendo (RN-REC-014).
+  perfilCulturalOrigem String?   @map("PERFILCULTURALORIGEM")
+  perfilCulturalDh     DateTime? @map("PERFILCULTURALDH")
   dhInc     DateTime @default(now()) @map("DHINC")
   codUsuInc BigInt?  @map("CODUSUINC")
   dhAlt     DateTime @updatedAt @map("DHALT")
@@ -618,6 +626,7 @@ model Candidato {
 
   tenant       Tenant               @relation(fields: [codTen], references: [codTen])
   curriculos   CandidatoCurriculo[]
+  respostasCulturais RespostaCultural[]
   candidaturas Candidatura[]
 
   @@unique([codTen, email])
@@ -720,6 +729,70 @@ model EstagioConfig {
 
   @@unique([codTen, codEmp, estagio])
   @@map("TREETPCFG")
+}
+
+/// Cultura padrão da empresa (RN-REC-014) — herdada pela vaga que não define a
+/// própria, mesmo desenho do Padrão Comportamental (`TGPPERPAD`).
+///
+/// JSON e não colunas tipadas, contrariando a preferência geral do projeto, por
+/// coerência: o lado da vaga (`TREVAG.PERFILCULTURALIDEALJSON`) já é JSON e o
+/// motor de match lê os dois com a mesma função. Duas formas para o mesmo dado
+/// custaria mais do que ganha.
+model CulturaPadraoEmpresa {
+  codCulEmp  BigInt   @id @default(autoincrement()) @map("CODCULEMP")
+  codTen     BigInt   @unique @map("CODTEN")
+  perfilJson Json     @map("PERFILJSON")
+  dhInc      DateTime @default(now()) @map("DHINC")
+  codUsuInc  BigInt?  @map("CODUSUINC")
+  dhAlt      DateTime @updatedAt @map("DHALT")
+  codUsuAlt  BigInt?  @map("CODUSUALT")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+
+  @@map("TRECULEMP")
+}
+
+/// Banco de afirmações do questionário cultural (RN-REC-014).
+///
+/// Global como o banco comportamental (`TGPPER`): é metodologia da plataforma,
+/// não conteúdo do tenant. Cada dimensão tem afirmações diretas e reversas —
+/// a reversa existe para pegar quem responde tudo no mesmo extremo, mesma
+/// razão do questionário comportamental.
+model PerguntaCultural {
+  codCulPer BigInt   @id @default(autoincrement()) @map("CODCULPER")
+  dimensao  String   @map("DIMENSAO")
+  texto     String   @map("TEXTO")
+  /// "S" inverte o valor na apuração (`6 - valor`).
+  reversa   String   @default("N") @map("REVERSA") @db.Char(1)
+  ordem     Int      @map("ORDEM")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+  dhInc     DateTime @default(now()) @map("DHINC")
+
+  respostas RespostaCultural[]
+
+  @@map("TRECULPER")
+}
+
+/// Resposta do candidato ao questionário cultural.
+///
+/// Guardar a resposta crua, e não só o perfil apurado, é o que permite
+/// recalcular quando a fórmula mudar e mostrar ao recrutador em que o número se
+/// apoia — mesma decisão já tomada no comportamental (`TGPRESP`).
+model RespostaCultural {
+  codCulResp BigInt   @id @default(autoincrement()) @map("CODCULRESP")
+  codTen     BigInt   @map("CODTEN")
+  codCand    BigInt   @map("CODCAND")
+  codCulPer  BigInt   @map("CODCULPER")
+  valor      Int      @map("VALOR")
+  dhInc      DateTime @default(now()) @map("DHINC")
+
+  tenant    Tenant           @relation(fields: [codTen], references: [codTen])
+  candidato Candidato        @relation(fields: [codCand], references: [codCand])
+  pergunta  PerguntaCultural @relation(fields: [codCulPer], references: [codCulPer])
+
+  @@unique([codCand, codCulPer])
+  @@index([codTen, codCand])
+  @@map("TRECULRESP")
 }
 
 /// Configuração de IA por tenant.

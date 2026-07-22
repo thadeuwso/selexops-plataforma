@@ -1039,6 +1039,100 @@ verificar("remove responsável (null) limpa o campo", limpaResp.status === 200 &
 const respOutroTenant = await http("PATCH", `/vagas/${vagaMatch.json?.codVag}/responsavel`, { codUsuResp: meuUsuario?.codUsu }, tokenB);
 verificar("tenant B não atribui responsável em vaga do tenant A → 400", respOutroTenant.status === 400);
 
+// 26a. Cultura da empresa e questionário cultural do candidato (RN-REC-014)
+const culturaAntes = await http("GET", "/configuracoes/cultura", null, tokenA2);
+verificar("cultura da empresa começa indefinida", culturaAntes.status === 200 && culturaAntes.json?.definida === false);
+
+const culturaDef = await http("PUT", "/configuracoes/cultura",
+  { perfil: { autonomy: 4, pace: 3, collaboration: 5, structure: 2, dataDriven: 4, directCommunication: 4 } }, tokenA2);
+verificar("define a cultura da empresa (200)", culturaDef.status === 200 && culturaDef.json?.definida === true);
+verificar(
+  "perfil fora da escala 1-5 é recusado → 400",
+  (await http("PUT", "/configuracoes/cultura", { perfil: { autonomy: 9 } }, tokenA2)).status === 400,
+);
+verificar(
+  "cultura do tenant A não vaza para o tenant B",
+  (await http("GET", "/configuracoes/cultura", null, tokenB)).json?.definida === false,
+);
+
+// Vaga sem cultura própria herda a da empresa — é o ponto do fallback.
+const vagaHerda = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Herda Cultura" }, tokenA2);
+await http("PATCH", `/vagas/${vagaHerda.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaHerda.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtHerda = await http("POST", `/vagas/${vagaHerda.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Candidato Cultura", email: `cultura.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+const detHerda = await http("GET", `/candidaturas/${cdtHerda.json?.codCdt}`, null, tokenA2);
+verificar(
+  "vaga sem cultura própria herda a da empresa (origem EMPRESA)",
+  detHerda.json?.culturaEfetiva?.origem === "EMPRESA" && detHerda.json.culturaEfetiva.perfil?.collaboration === 5,
+);
+
+// Portal do candidato — escrita pelo próprio candidato, sem login.
+const linkPortal = await http("POST", `/candidaturas/${cdtHerda.json?.codCdt}/link-acompanhamento`, {}, tokenA2);
+const tk = linkPortal.json?.tokenPub;
+const perfilPortal = await http("GET", `/portal/candidato/${tk}/perfil`);
+verificar(
+  "candidato vê o próprio perfil pelo token, sem login",
+  perfilPortal.status === 200 && perfilPortal.json?.nomeCand === "Candidato Cultura",
+);
+await http("PATCH", `/portal/candidato/${tk}/perfil`, { cidade: "Belo Horizonte — MG", cargoAtual: "Analista" });
+verificar(
+  "candidato atualiza os próprios dados",
+  (await http("GET", `/portal/candidato/${tk}/perfil`)).json?.cidade === "Belo Horizonte — MG",
+);
+verificar("token de portal inválido → 400", (await http("GET", "/portal/candidato/naoexiste/perfil")).status === 400);
+
+const questionario = await http("GET", `/portal/candidato/${tk}/cultura`);
+verificar("questionário cultural traz 12 afirmações", questionario.json?.total === 12);
+// Saber a dimensão ou que a afirmação é reversa ensina a responder na direção
+// desejada — e aí a medida deixa de medir.
+verificar(
+  "questionário não revela dimensão nem se a afirmação é reversa",
+  questionario.json?.perguntas?.every((p) => !("dimensao" in p) && !("reversa" in p)),
+);
+
+const parcial = await http("POST", `/portal/candidato/${tk}/cultura`, {
+  respostas: questionario.json.perguntas.slice(0, 3).map((p) => ({ codCulPer: p.codCulPer, valor: 4 })),
+});
+verificar("respostas parciais são salvas mas NÃO apuram o perfil", parcial.json?.completo === false);
+verificar(
+  "perfil cultural segue vazio enquanto o questionário está incompleto",
+  (await http("GET", `/candidaturas/${cdtHerda.json?.codCdt}`, null, tokenA2)).json?.candidato?.perfilCulturalJson == null,
+);
+
+const completo = await http("POST", `/portal/candidato/${tk}/cultura`, {
+  respostas: questionario.json.perguntas.map((p, i) => ({ codCulPer: p.codCulPer, valor: [5, 1, 4, 2, 5, 1, 2, 4, 4, 2, 5, 1][i] })),
+});
+verificar("questionário completo apura o perfil (6 dimensões)", completo.json?.completo === true && completo.json?.dimensoesRespondidas === 6);
+const detApurado = await http("GET", `/candidaturas/${cdtHerda.json?.codCdt}`, null, tokenA2);
+verificar(
+  "perfil apurado fica com origem CANDIDATO, não RECRUTADOR",
+  detApurado.json?.candidato?.perfilCulturalOrigem === "CANDIDATO" &&
+    Object.keys(detApurado.json.candidato.perfilCulturalJson).length === 6,
+);
+// Direta 5 + reversa 1 (=5) na mesma dimensão: candidato coerente, resultado 5.
+verificar(
+  "afirmação reversa é invertida na apuração",
+  detApurado.json.candidato.perfilCulturalJson.autonomy === 5,
+);
+
+// O que o recrutador digita NÃO pode sobrescrever o que o candidato respondeu.
+await http("POST", `/vagas/${vagaHerda.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Candidato Cultura", email: `cultura.${rodada}@mail.com`, perfilCultural: { autonomy: 1, pace: 1 } },
+  codCanal: canal.json?.codCanal,
+}, tokenA2);
+const detDepois = await http("GET", `/candidaturas/${cdtHerda.json?.codCdt}`, null, tokenA2);
+verificar(
+  "palpite do recrutador não sobrescreve o perfil respondido pelo candidato",
+  detDepois.json?.candidato?.perfilCulturalOrigem === "CANDIDATO" &&
+    detDepois.json.candidato.perfilCulturalJson.autonomy === 5,
+);
+verificar(
+  "tenant B não acessa o portal do candidato do tenant A com token inventado",
+  (await http("GET", `/portal/candidato/${tk}xx/perfil`)).status === 400,
+);
+
 // 26b. Banco de talentos paginado e buscado no servidor
 const talentos1 = await http("GET", "/candidatos?pagina=1&tamanhoPagina=3", null, tokenA2);
 verificar(
