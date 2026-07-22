@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, fetchAutenticado } from "@/lib/api";
 import { Abas, Gaveta } from "./formulario";
 import { AnaliseIaCandidato } from "@/componentes/analise-ia-candidato";
+import { PerfilComportamentalVisao } from "@/componentes/perfil-comportamental-visao";
 
 const DIMENSOES_CULTURA = [
   { chave: "autonomy", rotulo: "Autonomia" },
@@ -15,47 +16,12 @@ const DIMENSOES_CULTURA = [
   { chave: "directCommunication", rotulo: "Comunicação direta" },
 ] as const;
 
-const FATORES_COMPORTAMENTAIS = [
-  { sigla: "DIR", rotulo: "Direcionamento" },
-  { sigla: "CON", rotulo: "Conexão" },
-  { sigla: "SUS", rotulo: "Sustentação" },
-  { sigla: "PRE", rotulo: "Precisão" },
-] as const;
-
-const ROTULO_FAIXA: Record<string, string> = {
-  muito_baixa: "Muito baixa",
-  baixa: "Baixa",
-  moderada: "Moderada",
-  alta: "Alta",
-  muito_alta: "Muito alta",
-};
-
-const ROTULO_CONSISTENCIA: Record<string, string> = {
-  ADEQUADA: "Adequada",
-  REQUER_ATENCAO: "Requer atenção (muitas respostas neutras)",
-  BAIXA_CONSISTENCIA: "Baixa consistência (respostas muito uniformes)",
-};
-
 const ROTULO_STATUS_ADMISSAO: Record<string, string> = {
   AGUARDANDO_CANDIDATO: "Aguardando candidato",
   AGUARDANDO_APROVACAO_DP: "Aguardando aprovação do DP",
   AJUSTES_SOLICITADOS: "Ajustes solicitados",
   APROVADO: "Aprovado",
 };
-
-const ROTULO_STATUS_CONVITE: Record<string, string> = {
-  PENDENTE: "Convite enviado",
-  ACEITO: "Respondendo",
-  REVOGADO: "Revogado",
-  EXPIRADO: "Expirado",
-};
-
-function formatarTempo(segundos: number | null) {
-  if (segundos == null) return null;
-  const min = Math.floor(segundos / 60);
-  const seg = segundos % 60;
-  return `${min}min ${String(seg).padStart(2, "0")}s`;
-}
 
 interface DetalheCandidatura {
   codCdt: string;
@@ -134,15 +100,6 @@ interface DetalheComportamental {
   } | null;
 }
 
-interface RespostaResumoIa {
-  resumo: string;
-  pontosFortes: string[];
-  pontosAtencao: string[];
-}
-interface RespostaPerguntasIa {
-  perguntas: { pergunta: string; motivo: string }[];
-}
-
 interface EventoHistorico {
   codCdtHis: string;
   tipoEvento: string;
@@ -207,8 +164,6 @@ export function CandidatoDrawer({
   const [enviandoCv, setEnviandoCv] = useState(false);
   const [convidando, setConvidando] = useState(false);
   const [iniciandoAdmissao, setIniciandoAdmissao] = useState(false);
-  const [gerandoResumo, setGerandoResumo] = useState(false);
-  const [gerandoPerguntas, setGerandoPerguntas] = useState(false);
   const [anotacoes, setAnotacoes] = useState<EventoHistorico[] | null>(null);
   const [novaNota, setNovaNota] = useState("");
   const [salvandoNota, setSalvandoNota] = useState(false);
@@ -238,7 +193,7 @@ export function CandidatoDrawer({
         if (r.status === 200 && r.json) setCurriculos(r.json);
       });
     }
-    if (tab === "comportamental" && comportamental === null) {
+    if (tab === "dossie" && comportamental === null) {
       void api<DetalheComportamental>(`/candidaturas/${codCdt}/avaliacao-comportamental`).then((r) => {
         setComportamental(r.status === 200 && r.json ? r.json : "sem_convite");
       });
@@ -348,38 +303,9 @@ export function CandidatoDrawer({
     }
   }
 
-  async function recarregarComportamental() {
-    if (!codCdt) return;
-    const r = await api<DetalheComportamental>(`/candidaturas/${codCdt}/avaliacao-comportamental`);
-    setComportamental(r.status === 200 && r.json ? r.json : "sem_convite");
-  }
-
-  async function gerarResumoIa() {
-    if (!codCdt) return;
-    setGerandoResumo(true);
-    const r = await api(`/candidaturas/${codCdt}/avaliacao-comportamental/gerar-resumo`, { metodo: "POST" });
-    setGerandoResumo(false);
-    if (r.status !== 201) {
-      alert("Não foi possível gerar o resumo com IA. Tente novamente em instantes.");
-      return;
-    }
-    await recarregarComportamental();
-  }
-
-  async function gerarPerguntasIa() {
-    if (!codCdt) return;
-    setGerandoPerguntas(true);
-    const r = await api(`/candidaturas/${codCdt}/avaliacao-comportamental/gerar-perguntas-entrevista`, { metodo: "POST" });
-    setGerandoPerguntas(false);
-    if (r.status !== 201) {
-      alert("Não foi possível gerar as perguntas com IA. Tente novamente em instantes.");
-      return;
-    }
-    await recarregarComportamental();
-  }
 
   return (
-    <Gaveta titulo={detalhe ? detalhe.candidato.nomeCand : "Candidato"} aberta={!!codCdt} fechar={fechar} largura={680}>
+    <Gaveta titulo={detalhe ? detalhe.candidato.nomeCand : "Candidato"} aberta={!!codCdt} fechar={fechar} largura={1420}>
       {!detalhe ? (
         <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Carregando...</p>
       ) : (
@@ -422,8 +348,7 @@ export function CandidatoDrawer({
             abas={[
               { id: "perfil", rotulo: "Resumo" },
               { id: "curriculo", rotulo: "Currículo" },
-              { id: "comportamental", rotulo: "Avaliação" },
-              { id: "analise-ia", rotulo: "Análise IA" },
+              { id: "dossie", rotulo: "Dossiê" },
               { id: "historico", rotulo: "Histórico" },
               { id: "anotacoes", rotulo: "Anotações" },
             ]}
@@ -617,201 +542,26 @@ export function CandidatoDrawer({
             </div>
           )}
 
-          {tab === "comportamental" && (
-            <div style={{ display: "grid", gap: 16 }}>
-              {comportamental === null ? (
-                <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Carregando...</p>
-              ) : comportamental === "sem_convite" ? (
-                <button
-                  onClick={convidarComportamental}
-                  disabled={convidando}
-                  style={{
-                    padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border-default)",
-                    background: "var(--surface-default)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", width: "fit-content",
-                  }}
-                >
-                  {convidando ? "Gerando link..." : "Convidar avaliação comportamental"}
-                </button>
-              ) : !comportamental.sessao?.resultado ? (
-                <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                  {ROTULO_STATUS_CONVITE[comportamental.status] ?? comportamental.status} — aguardando o candidato concluir.
-                </p>
-              ) : (
-                (() => {
-                  const resultado = comportamental.sessao.resultado;
-                  const aderenciaVaga = resultado.aderencias[0] ?? comportamental.aderenciaPadrao ?? undefined;
-                  const aderenciaViaPadrao = !resultado.aderencias[0] && !!comportamental.aderenciaPadrao;
-                  const facetas = [...comportamental.facetas].sort((a, b) => b.percentualNormalizado - a.percentualNormalizado);
-                  const maiorForca = facetas[0];
-                  const maiorAtencao = facetas[facetas.length - 1];
-                  const tempo = formatarTempo(comportamental.sessao.tempoTotalSeg);
-                  return (
-                    <>
-                      <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
-                        <span>{facetas.reduce((s, f) => s + f.quantidade, 0)} respostas</span>
-                        {tempo && <span>· {tempo} de duração</span>}
-                      </div>
+          {tab === "dossie" && (
+            <div style={{ display: "grid", gap: 22 }}>
+              {/* Perfil comportamental e leitura do candidato numa página só:
+                  eram duas abas, e quem lê os fatores quer, no mesmo fôlego,
+                  o que eles significam para esta vaga. */}
+              <section>
+                <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 10px" }}>Perfil comportamental</h3>
+                <PerfilComportamentalVisao
+                  comportamental={comportamental}
+                  convidando={convidando}
+                  aoConvidar={convidarComportamental}
+                />
+              </section>
 
-                      {resultado.indicadorConsistencia !== "ADEQUADA" && (
-                        <div style={{ padding: "8px 12px", borderRadius: 8, background: "var(--amber-100, #F2E3C4)", color: "var(--amber-700, #714E08)", fontSize: 12 }}>
-                          ⚠ {ROTULO_CONSISTENCIA[resultado.indicadorConsistencia] ?? resultado.indicadorConsistencia}
-                          {" — "}
-                          {Math.round(resultado.percRespNeutras)}% de respostas neutras, {Math.round(resultado.percRespUniformes)}% na mesma alternativa.
-                        </div>
-                      )}
-
-                      {aderenciaVaga && (
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                            Aderência geral à vaga
-                            {aderenciaViaPadrao && <span style={{ fontWeight: 400, color: "var(--text-muted)" }}> (via padrão da empresa)</span>}
-                          </div>
-                          <div style={{ fontSize: 28, fontWeight: 700 }}>{aderenciaVaga.aderenciaGeral}</div>
-                        </div>
-                      )}
-
-                      {maiorForca && maiorAtencao && maiorForca.faceta !== maiorAtencao.faceta && (
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                          <div style={{ border: "1px solid var(--border-default)", borderRadius: 8, padding: 10 }}>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Ponto mais forte</div>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>{maiorForca.faceta}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{maiorForca.percentualNormalizado}%</div>
-                          </div>
-                          <div style={{ border: "1px solid var(--border-default)", borderRadius: 8, padding: 10 }}>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Ponto de atenção</div>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>{maiorAtencao.faceta}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{maiorAtencao.percentualNormalizado}%</div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Fatores comportamentais</div>
-                        <div style={{ display: "grid", gap: 16 }}>
-                          {FATORES_COMPORTAMENTAIS.map((f) => {
-                            const rf = resultado.fatores.find((x) => x.fator.sigla === f.sigla);
-                            if (!rf) return null;
-                            const af = aderenciaVaga?.fatores.find((x) => x.fator.sigla === f.sigla);
-                            const facetasFator = facetas.filter((x) => x.codFat === f.sigla);
-                            return (
-                              <div key={f.sigla}>
-                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                                  <span style={{ fontWeight: 600 }}>{f.rotulo}</span>
-                                  <span style={{ color: "var(--text-muted)" }}>
-                                    {rf.percentualNormalizado}% · {ROTULO_FAIXA[rf.faixaInterpretativa] ?? rf.faixaInterpretativa}
-                                  </span>
-                                </div>
-                                <div style={{ height: 6, background: "var(--border-default)", borderRadius: 999, overflow: "hidden" }}>
-                                  <div style={{ height: "100%", width: `${rf.percentualNormalizado}%`, background: "var(--brand-700)" }} />
-                                </div>
-                                {af && (
-                                  <div style={{ fontSize: 11, color: af.dentroDaFaixa === "S" ? "var(--green-700, #1D533B)" : "var(--red-600, #9A3833)", marginTop: 2 }}>
-                                    {af.dentroDaFaixa === "S" ? "Dentro da faixa desejada pela vaga" : `Fora da faixa desejada pela vaga (aderência ${af.aderenciaDimensao})`}
-                                  </div>
-                                )}
-                                {facetasFator.length > 0 && (
-                                  <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: "2px solid var(--border-default)", display: "grid", gap: 6 }}>
-                                    {facetasFator.map((ft) => (
-                                      <div key={ft.faceta} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        <span style={{ fontSize: 11, color: "var(--text-muted)", width: 170, flexShrink: 0 }}>{ft.faceta}</span>
-                                        <div style={{ flex: 1, height: 4, background: "var(--border-default)", borderRadius: 999, overflow: "hidden" }}>
-                                          <div style={{ height: "100%", width: `${ft.percentualNormalizado}%`, background: "var(--brand-500, #8A5B3F)" }} />
-                                        </div>
-                                        <span style={{ fontSize: 11, color: "var(--text-muted)", width: 32, textAlign: "right" }}>
-                                          {Math.round(ft.percentualNormalizado)}%
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {(() => {
-                        const resumoIa = resultado.iaResumos.find((r) => r.tipo === "RESUMO_EXECUTIVO")?.conteudoJson as RespostaResumoIa | undefined;
-                        const perguntasIa = resultado.iaResumos.find((r) => r.tipo === "PERGUNTAS_ENTREVISTA")?.conteudoJson as RespostaPerguntasIa | undefined;
-                        return (
-                          <div style={{ display: "grid", gap: 16, borderTop: "1px solid var(--border-default)", paddingTop: 16 }}>
-                            <div>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600 }}>Resumo executivo (IA)</div>
-                                {!resumoIa && (
-                                  <button
-                                    onClick={gerarResumoIa}
-                                    disabled={gerandoResumo}
-                                    style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
-                                  >
-                                    {gerandoResumo ? "Gerando..." : "Gerar resumo"}
-                                  </button>
-                                )}
-                              </div>
-                              {resumoIa ? (
-                                <div style={{ fontSize: 12, display: "grid", gap: 8 }}>
-                                  <p style={{ margin: 0 }}>{resumoIa.resumo}</p>
-                                  {resumoIa.pontosFortes.length > 0 && (
-                                    <div>
-                                      <span style={{ color: "var(--text-muted)" }}>Pontos fortes: </span>
-                                      {resumoIa.pontosFortes.join(" · ")}
-                                    </div>
-                                  )}
-                                  {resumoIa.pontosAtencao.length > 0 && (
-                                    <div>
-                                      <span style={{ color: "var(--text-muted)" }}>Explorar na entrevista: </span>
-                                      {resumoIa.pontosAtencao.join(" · ")}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                                  Gera uma explicação em linguagem simples do resultado acima — a IA só explica, nunca recalcula o score.
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600 }}>Perguntas de entrevista sugeridas (IA)</div>
-                                {!perguntasIa && (
-                                  <button
-                                    onClick={gerarPerguntasIa}
-                                    disabled={gerandoPerguntas}
-                                    style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
-                                  >
-                                    {gerandoPerguntas ? "Gerando..." : "Sugerir perguntas"}
-                                  </button>
-                                )}
-                              </div>
-                              {perguntasIa ? (
-                                <div style={{ display: "grid", gap: 8 }}>
-                                  {perguntasIa.perguntas.map((p, i) => (
-                                    <div key={i} style={{ fontSize: 12 }}>
-                                      <div style={{ fontWeight: 600 }}>{p.pergunta}</div>
-                                      <div style={{ color: "var(--text-muted)" }}>{p.motivo}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                                  Sugere perguntas pra validar na entrevista os pontos identificados no resultado.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </>
-                  );
-                })()
-              )}
+              <section style={{ borderTop: "1px solid var(--border-default)", paddingTop: 20 }}>
+                {codCdt && <AnaliseIaCandidato codCdt={codCdt} />}
+              </section>
             </div>
           )}
 
-          {/* Componente próprio: cuida do próprio carregamento e do próprio
-              estado — esta gaveta já é grande demais. */}
-          {tab === "analise-ia" && codCdt && <AnaliseIaCandidato codCdt={codCdt} />}
 
           {tab === "historico" && (
             <div style={{ display: "grid", gap: 10 }}>

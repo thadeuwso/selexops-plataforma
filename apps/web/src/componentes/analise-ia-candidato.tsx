@@ -132,8 +132,11 @@ export function AnaliseIaCandidato({ codCdt }: { codCdt: string }) {
   }
 
   const c = analise.conteudoJson;
+  // Largura limitada só na prosa: numa linha de 1400px o olho perde o começo da
+  // linha seguinte. Os cartões e barras do perfil, acima, seguem usando a
+  // gaveta inteira, onde a largura ajuda a comparar.
   return (
-    <div style={{ display: "grid", gap: 18, fontSize: 13 }}>
+    <div style={{ display: "grid", gap: 18, fontSize: 13, maxWidth: 880 }}>
       {analise.desatualizada && (
         <div
           style={{
