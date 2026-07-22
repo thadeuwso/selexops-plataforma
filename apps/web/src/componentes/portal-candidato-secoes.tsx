@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { BASE } from "@/lib/api";
-import { BotaoPrimario, Campo, Entrada, Erro } from "@/componentes/formulario";
+import { BotaoPrimario, Campo, Entrada, Erro, Selecao } from "@/componentes/formulario";
 
 interface PerfilPortal {
   nomeCand: string;
@@ -120,6 +120,7 @@ export function PortalCandidatoSecoes({ token }: { token: string }) {
       </section>
 
       <EscolhaEntrevista token={token} />
+      <DadosEstruturados token={token} />
       <EnvioCurriculo token={token} enviadoEm={perfil.curriculoEnviadoEm} aoEnviar={carregar} />
       <QuestionarioCultural token={token} respondido={perfil.culturaRespondida} aoConcluir={carregar} />
     </>
@@ -254,7 +255,218 @@ function EscolhaEntrevista({ token }: { token: string }) {
   );
 }
 
+const NIVEIS = [
+  { valor: "FUNDAMENTAL", rotulo: "Ensino fundamental" },
+  { valor: "MEDIO", rotulo: "Ensino médio" },
+  { valor: "TECNICO", rotulo: "Técnico" },
+  { valor: "SUPERIOR", rotulo: "Superior" },
+  { valor: "POS", rotulo: "Pós-graduação" },
+  { valor: "MESTRADO", rotulo: "Mestrado" },
+  { valor: "DOUTORADO", rotulo: "Doutorado" },
+];
+const SITUACOES = [
+  { valor: "CONCLUIDO", rotulo: "Concluído" },
+  { valor: "CURSANDO", rotulo: "Cursando" },
+  { valor: "TRANCADO", rotulo: "Trancado" },
+];
+
+interface Formacao {
+  codFor: string;
+  nivel: string;
+  curso: string | null;
+  instituicao: string | null;
+  situacao: string;
+  anoConclusao: number | null;
+}
+
+/**
+ * Formação, pretensão e disponibilidade (RN-REC-016).
+ *
+ * Eram texto solto no currículo. Preenchidos aqui pelo próprio candidato,
+ * viram dado que filtra — e ninguém precisa garimpar no PDF.
+ */
+function DadosEstruturados({ token }: { token: string }) {
+  const [formacoes, setFormacoes] = useState<Formacao[]>([]);
+  const [form, setForm] = useState({ pretensaoSalarial: "", pretensaoNegociavel: "", dispTipo: "", dispAvisoDias: "", dispData: "" });
+  const [nova, setNova] = useState({ nivel: "SUPERIOR", curso: "", instituicao: "", situacao: "CONCLUIDO", anoConclusao: "" });
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const carregar = useCallback(async () => {
+    const res = await fetch(`${BASE}/portal/candidato/${token}/estruturados`);
+    if (!res.ok) return;
+    const d = await res.json();
+    setFormacoes(d.formacoes ?? []);
+    setForm({
+      pretensaoSalarial: d.pretensaoSalarial != null ? String(d.pretensaoSalarial) : "",
+      pretensaoNegociavel: d.pretensaoNegociavel ?? "",
+      dispTipo: d.dispTipo ?? "",
+      dispAvisoDias: d.dispAvisoDias != null ? String(d.dispAvisoDias) : "",
+      dispData: d.dispData ? String(d.dispData).slice(0, 10) : "",
+    });
+  }, [token]);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    setErro(null);
+    setSalvo(false);
+    setSalvando(true);
+    const res = await fetch(`${BASE}/portal/candidato/${token}/estruturados`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pretensaoSalarial: form.pretensaoSalarial ? Number(form.pretensaoSalarial) : null,
+        pretensaoNegociavel: form.pretensaoNegociavel || null,
+        dispTipo: form.dispTipo || null,
+        dispAvisoDias: form.dispTipo === "AVISO_PREVIO" && form.dispAvisoDias ? Number(form.dispAvisoDias) : null,
+        dispData: form.dispTipo === "A_PARTIR_DE" && form.dispData ? form.dispData : null,
+      }),
+    });
+    setSalvando(false);
+    if (!res.ok) {
+      setErro("Não foi possível salvar agora.");
+      return;
+    }
+    setSalvo(true);
+    await carregar();
+  }
+
+  async function adicionarFormacao() {
+    setErro(null);
+    const res = await fetch(`${BASE}/portal/candidato/${token}/formacoes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        nivel: nova.nivel,
+        curso: nova.curso || undefined,
+        instituicao: nova.instituicao || undefined,
+        situacao: nova.situacao,
+        anoConclusao: nova.anoConclusao ? Number(nova.anoConclusao) : undefined,
+      }),
+    });
+    if (!res.ok) {
+      setErro("Não foi possível adicionar a formação.");
+      return;
+    }
+    setNova({ nivel: "SUPERIOR", curso: "", instituicao: "", situacao: "CONCLUIDO", anoConclusao: "" });
+    await carregar();
+  }
+
+  async function removerFormacao(codFor: string) {
+    await fetch(`${BASE}/portal/candidato/${token}/formacoes/${codFor}`, { method: "DELETE" });
+    await carregar();
+  }
+
+  return (
+    <section style={{ ...cartao, marginTop: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 600, margin: "0 0 4px" }}>Formação e disponibilidade</h2>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.55 }}>
+        Preencher aqui evita que a empresa precise procurar no seu currículo — e ajuda você a
+        aparecer nas buscas certas.
+      </p>
+
+      <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 8px" }}>Formação</h3>
+      {formacoes.length > 0 && (
+        <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
+          {formacoes.map((f) => (
+            <div key={f.codFor} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, alignItems: "center" }}>
+              <span>
+                {NIVEIS.find((n) => n.valor === f.nivel)?.rotulo ?? f.nivel}
+                {f.curso ? ` — ${f.curso}` : ""}
+                {f.instituicao ? ` (${f.instituicao})` : ""}
+                <span style={{ color: "var(--text-muted)" }}>
+                  {" · "}
+                  {SITUACOES.find((x) => x.valor === f.situacao)?.rotulo ?? f.situacao}
+                  {f.anoConclusao ? ` ${f.anoConclusao}` : ""}
+                </span>
+              </span>
+              <button
+                onClick={() => removerFormacao(f.codFor)}
+                style={{ background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 12, flexShrink: 0 }}
+              >
+                remover
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end" }}>
+        <Campo rotulo="Nível">
+          <Selecao value={nova.nivel} onChange={(e) => setNova({ ...nova, nivel: e.target.value })}>
+            {NIVEIS.map((n) => <option key={n.valor} value={n.valor}>{n.rotulo}</option>)}
+          </Selecao>
+        </Campo>
+        <Campo rotulo="Curso">
+          <Entrada value={nova.curso} onChange={(e) => setNova({ ...nova, curso: e.target.value })} />
+        </Campo>
+        <Campo rotulo="Instituição">
+          <Entrada value={nova.instituicao} onChange={(e) => setNova({ ...nova, instituicao: e.target.value })} />
+        </Campo>
+        <Campo rotulo="Situação">
+          <Selecao value={nova.situacao} onChange={(e) => setNova({ ...nova, situacao: e.target.value })}>
+            {SITUACOES.map((x) => <option key={x.valor} value={x.valor}>{x.rotulo}</option>)}
+          </Selecao>
+        </Campo>
+        <Campo rotulo="Ano">
+          <Entrada type="number" min={1950} max={2100} value={nova.anoConclusao} onChange={(e) => setNova({ ...nova, anoConclusao: e.target.value })} />
+        </Campo>
+      </div>
+      <button
+        onClick={adicionarFormacao}
+        style={{ marginTop: 10, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}
+      >
+        Adicionar formação
+      </button>
+
+      <form onSubmit={salvar} style={{ display: "grid", gap: 12, marginTop: 22, borderTop: "1px solid var(--border-default)", paddingTop: 18 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>Pretensão e disponibilidade</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+          <Campo rotulo="Pretensão salarial (R$/mês)">
+            <Entrada type="number" min={0} value={form.pretensaoSalarial} onChange={(e) => setForm({ ...form, pretensaoSalarial: e.target.value })} />
+          </Campo>
+          <Campo rotulo="Aceita negociar?">
+            <Selecao value={form.pretensaoNegociavel} onChange={(e) => setForm({ ...form, pretensaoNegociavel: e.target.value })}>
+              <option value="">Não informar</option>
+              <option value="S">Sim</option>
+              <option value="N">Não</option>
+            </Selecao>
+          </Campo>
+          <Campo rotulo="Quando pode começar">
+            <Selecao value={form.dispTipo} onChange={(e) => setForm({ ...form, dispTipo: e.target.value })}>
+              <option value="">Não informar</option>
+              <option value="IMEDIATA">Imediatamente</option>
+              <option value="AVISO_PREVIO">Após cumprir aviso prévio</option>
+              <option value="A_PARTIR_DE">A partir de uma data</option>
+            </Selecao>
+          </Campo>
+          {form.dispTipo === "AVISO_PREVIO" && (
+            <Campo rotulo="Dias de aviso prévio">
+              <Entrada type="number" min={0} max={365} value={form.dispAvisoDias} onChange={(e) => setForm({ ...form, dispAvisoDias: e.target.value })} />
+            </Campo>
+          )}
+          {form.dispTipo === "A_PARTIR_DE" && (
+            <Campo rotulo="A partir de">
+              <Entrada type="date" value={form.dispData} onChange={(e) => setForm({ ...form, dispData: e.target.value })} />
+            </Campo>
+          )}
+        </div>
+        <Erro mensagem={erro} />
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <BotaoPrimario type="submit" disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</BotaoPrimario>
+          {salvo && <span style={{ fontSize: 13, color: "var(--feedback-success, #15803d)" }}>Salvo.</span>}
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function EnvioCurriculo({
+
   token,
   enviadoEm,
   aoEnviar,

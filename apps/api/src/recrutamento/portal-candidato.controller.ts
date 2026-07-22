@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -17,6 +18,7 @@ import { PrismaService } from '../compartilhado/prisma/prisma.service';
 import { salvarCurriculo } from './armazenamento-curriculo';
 import { extrairTextoCurriculo, tipoArquivoAceito } from './curriculo-extracao';
 import { apurarPerfilCultural, dimensoesRespondidas } from './apurar-cultura';
+import { NIVEIS_FORMACAO, TIPOS_DISPONIBILIDADE } from './campos-estruturados';
 
 const TAMANHO_MAX_BYTES = 8 * 1024 * 1024;
 const TOTAL_DIMENSOES = 6;
@@ -26,6 +28,22 @@ const esquemaPerfil = z.object({
   cidade: z.string().max(120).optional(),
   linkedin: z.string().max(300).optional(),
   cargoAtual: z.string().max(160).optional(),
+});
+
+const esquemaEstruturados = z.object({
+  pretensaoSalarial: z.coerce.number().min(0).max(9999999).nullable().optional(),
+  pretensaoNegociavel: z.enum(['S', 'N']).nullable().optional(),
+  dispTipo: z.enum(TIPOS_DISPONIBILIDADE).nullable().optional(),
+  dispAvisoDias: z.coerce.number().int().min(0).max(365).nullable().optional(),
+  dispData: z.coerce.date().nullable().optional(),
+});
+
+const esquemaFormacao = z.object({
+  nivel: z.enum(NIVEIS_FORMACAO),
+  curso: z.string().max(160).optional(),
+  instituicao: z.string().max(160).optional(),
+  situacao: z.enum(['CONCLUIDO', 'CURSANDO', 'TRANCADO']).default('CONCLUIDO'),
+  anoConclusao: z.coerce.number().int().min(1950).max(2100).optional(),
 });
 
 const esquemaRespostas = z.object({
@@ -151,6 +169,69 @@ export class PortalCandidatoController {
       },
     });
     return { ok: true, statusExtracao: extraido.status };
+  }
+
+  /** Formação, pretensão e disponibilidade — o que o candidato informa sobre si. */
+  @Publico()
+  @Get(':token/estruturados')
+  async consultarEstruturados(@Param('token') token: string) {
+    const cdt = await this.candidaturaPorToken(token);
+    const [candidato, formacoes] = await Promise.all([
+      this.prisma.admin.candidato.findUnique({
+        where: { codCand: cdt.codCand },
+        select: {
+          pretensaoSalarial: true,
+          pretensaoNegociavel: true,
+          dispTipo: true,
+          dispAvisoDias: true,
+          dispData: true,
+        },
+      }),
+      this.prisma.admin.formacaoCandidato.findMany({
+        where: { codCand: cdt.codCand },
+        orderBy: { codFor: 'asc' },
+      }),
+    ]);
+    return { ...candidato, formacoes };
+  }
+
+  @Publico()
+  @Patch(':token/estruturados')
+  async atualizarEstruturados(@Param('token') token: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaEstruturados, corpo);
+    const cdt = await this.candidaturaPorToken(token);
+    // Só grava o que veio: PATCH parcial não pode apagar o que o candidato
+    // preencheu numa visita anterior.
+    const data: Record<string, unknown> = {};
+    for (const [chave, valor] of Object.entries(dados)) {
+      if (valor !== undefined) data[chave] = valor;
+    }
+    await this.prisma.admin.candidato.update({ where: { codCand: cdt.codCand }, data });
+    return { ok: true };
+  }
+
+  @Publico()
+  @Post(':token/formacoes')
+  async adicionarFormacao(@Param('token') token: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaFormacao, corpo);
+    const cdt = await this.candidaturaPorToken(token);
+    const criada = await this.prisma.admin.formacaoCandidato.create({
+      data: { codTen: cdt.codTen, codCand: cdt.codCand, ...dados },
+    });
+    return criada;
+  }
+
+  @Publico()
+  @Delete(':token/formacoes/:codFor')
+  async removerFormacao(@Param('token') token: string, @Param('codFor') codFor: string) {
+    const cdt = await this.candidaturaPorToken(token);
+    // Amarra a formação ao candidato do token: sem isso, um token removeria a
+    // formação de outra pessoa.
+    const removidas = await this.prisma.admin.formacaoCandidato.deleteMany({
+      where: { codFor: BigInt(codFor), codCand: cdt.codCand },
+    });
+    if (removidas.count === 0) throw new BadRequestException('Formação inexistente');
+    return { ok: true };
   }
 
   /** Horários disponíveis para a entrevista, e o que o candidato já escolheu. */

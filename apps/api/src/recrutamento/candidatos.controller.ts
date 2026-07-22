@@ -14,6 +14,7 @@ import {
   type PerfilCultural,
 } from './calcular-match';
 import { montarEvidencias } from './analise-candidato';
+import { NIVEIS_FORMACAO, ordemNivel, rotuloDisponibilidade, TIPOS_DISPONIBILIDADE } from './campos-estruturados';
 import { EmailService } from '../compartilhado/email/email.service';
 
 export const ESTAGIOS = [
@@ -48,6 +49,10 @@ const esquemaListaCandidaturas = z.object({
   busca: z.string().optional(),
   aderenciaMin: z.coerce.number().min(0).max(100).optional(),
   aderenciaMax: z.coerce.number().min(0).max(100).optional(),
+  // RN-REC-016: os campos estruturados só valem a pena se filtram.
+  pretensaoMax: z.coerce.number().min(0).optional(),
+  dispTipo: z.enum(TIPOS_DISPONIBILIDADE).optional(),
+  formacaoMin: z.enum(NIVEIS_FORMACAO).optional(),
 });
 
 function ordenarPorParaOrderBy(ordenar: (typeof ORDENACOES)[number]): Prisma.CandidaturaOrderByWithRelationInput {
@@ -597,6 +602,25 @@ export class CandidatosController {
         };
       }
 
+      // RN-REC-016: filtros pelos campos estruturados. Acumulam no mesmo
+      // `where.candidato` para conviverem com a busca textual acima.
+      const filtroCandidato: Prisma.CandidatoWhereInput = (where.candidato as Prisma.CandidatoWhereInput) ?? {};
+      if (dados.pretensaoMax != null) {
+        // Quem não informou pretensão **não** é excluído: ausência de dado não
+        // é motivo para sumir da lista — o recrutador precisa vê-lo para pedir.
+        filtroCandidato.AND = [
+          ...((filtroCandidato.AND as Prisma.CandidatoWhereInput[]) ?? []),
+          { OR: [{ pretensaoSalarial: { lte: dados.pretensaoMax } }, { pretensaoSalarial: null }] },
+        ];
+      }
+      if (dados.dispTipo) filtroCandidato.dispTipo = dados.dispTipo;
+      if (dados.formacaoMin) {
+        // Só formação CONCLUÍDA conta, no nível pedido ou acima.
+        const aceitos = NIVEIS_FORMACAO.filter((n) => ordemNivel(n) >= ordemNivel(dados.formacaoMin!));
+        filtroCandidato.formacoes = { some: { situacao: 'CONCLUIDO', nivel: { in: [...aceitos] } } };
+      }
+      if (Object.keys(filtroCandidato).length > 0) where.candidato = filtroCandidato;
+
       const [itens, total] = await Promise.all([
         tx.candidatura.findMany({
           where,
@@ -652,7 +676,10 @@ export class CandidatosController {
         where: { codCdt: BigInt(codCdt), ativo: 'S' },
         include: {
           candidato: {
-            include: { curriculos: { orderBy: { codCandCv: 'desc' }, take: 1, select: { textoExtraido: true, dhInc: true } } },
+            include: {
+              curriculos: { orderBy: { codCandCv: 'desc' }, take: 1, select: { textoExtraido: true, dhInc: true } },
+              formacoes: { orderBy: { codFor: 'asc' } },
+            },
           },
           canal: { select: { nomeCanal: true } },
           vaga: { select: { codVag: true, titulo: true, perfilCulturalIdealJson: true, requisitos: true } },
@@ -747,7 +774,15 @@ export class CandidatosController {
         };
       });
 
-      return { ...cdt, requisitosAvaliados, situacao, culturaEfetiva };
+      // Rótulo pronto: a regra de como ler disponibilidade mora no backend,
+      // para a tela não reimplementá-la de outro jeito.
+      return {
+        ...cdt,
+        requisitosAvaliados,
+        situacao,
+        culturaEfetiva,
+        disponibilidadeRotulo: rotuloDisponibilidade(cdt.candidato),
+      };
     });
   }
 

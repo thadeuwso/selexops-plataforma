@@ -60,6 +60,7 @@ model Tenant {
   emails         EmailFila[]
   entrevistas    Entrevista[]
   entrevistaHorarios EntrevistaHorario[]
+  formacoes      FormacaoCandidato[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -627,6 +628,24 @@ model Candidato {
   /// o fit cultural precisa saber qual está vendo (RN-REC-014).
   perfilCulturalOrigem String?   @map("PERFILCULTURALORIGEM")
   perfilCulturalDh     DateTime? @map("PERFILCULTURALDH")
+
+  // ===== Campos estruturados (RN-REC-016) =====
+  // Eram texto solto no currículo — o recrutador lia um a um e não conseguia
+  // filtrar. Tipados, entram em busca, ordenação e comparação.
+
+  /// Pretensão salarial mensal. Sem moeda: a plataforma é BRL até existir
+  /// operação fora do Brasil, e uma coluna de moeda sempre "BRL" só mente.
+  pretensaoSalarial    Decimal?  @map("PRETENSAOSALARIAL") @db.Decimal(15, 2)
+  /// "S" quando o candidato aceita negociar. Muda completamente a leitura de
+  /// uma pretensão acima da faixa da vaga.
+  pretensaoNegociavel  String?   @map("PRETENSAONEGOCIAVEL") @db.Char(1)
+  /// IMEDIATA | AVISO_PREVIO | A_PARTIR_DE
+  dispTipo             String?   @map("DISPTIPO")
+  /// Dias de aviso prévio a cumprir — só faz sentido com dispTipo=AVISO_PREVIO.
+  dispAvisoDias        Int?      @map("DISPAVISODIAS")
+  /// Data a partir da qual pode começar — só com dispTipo=A_PARTIR_DE.
+  dispData             DateTime? @map("DISPDATA") @db.Date
+
   dhInc     DateTime @default(now()) @map("DHINC")
   codUsuInc BigInt?  @map("CODUSUINC")
   dhAlt     DateTime @updatedAt @map("DHALT")
@@ -636,6 +655,7 @@ model Candidato {
   tenant       Tenant               @relation(fields: [codTen], references: [codTen])
   curriculos   CandidatoCurriculo[]
   respostasCulturais RespostaCultural[]
+  formacoes    FormacaoCandidato[]
   candidaturas Candidatura[]
 
   @@unique([codTen, email])
@@ -803,6 +823,32 @@ model RespostaCultural {
   @@unique([codCand, codCulPer])
   @@index([codTen, codCand])
   @@map("TRECULRESP")
+}
+
+/// Formação do candidato (RN-REC-016).
+///
+/// Tabela própria, e não campo no candidato, porque formação é 1:N: quem tem
+/// técnico e superior tem duas, e achatar isso em texto foi justamente o que
+/// impedia filtrar por "superior completo".
+model FormacaoCandidato {
+  codFor       BigInt   @id @default(autoincrement()) @map("CODFOR")
+  codTen       BigInt   @map("CODTEN")
+  codCand      BigInt   @map("CODCAND")
+  /// FUNDAMENTAL | MEDIO | TECNICO | SUPERIOR | POS | MESTRADO | DOUTORADO
+  nivel        String   @map("NIVEL")
+  curso        String?  @map("CURSO")
+  instituicao  String?  @map("INSTITUICAO")
+  /// CONCLUIDO | CURSANDO | TRANCADO — cursando não é concluído, e tratar os
+  /// dois como iguais faria a triagem aprovar quem ainda não se formou.
+  situacao     String   @default("CONCLUIDO") @map("SITUACAO")
+  anoConclusao Int?     @map("ANOCONCLUSAO")
+  dhInc        DateTime @default(now()) @map("DHINC")
+
+  tenant    Tenant    @relation(fields: [codTen], references: [codTen])
+  candidato Candidato @relation(fields: [codCand], references: [codCand])
+
+  @@index([codTen, codCand])
+  @@map("TRECANDFOR")
 }
 
 /// Horário de entrevista aberto pelo recrutador (RN-REC-015).

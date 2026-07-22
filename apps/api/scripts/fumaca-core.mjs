@@ -1089,6 +1089,88 @@ verificar(
   reconvite.json?.codConv === conviteComEmail.json?.codConv && reconvite.json?.emailEnfileirado === false,
 );
 
+// 25a. Campos estruturados do candidato (RN-REC-016)
+const vagaEst = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Estruturados" }, tokenA2);
+await http("PATCH", `/vagas/${vagaEst.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
+await http("PATCH", `/vagas/${vagaEst.json?.codVag}/status`, { acao: "aprovar" }, tokenA2);
+const cdtSup = await http("POST", `/vagas/${vagaEst.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Com Superior", email: `sup.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+const cdtMed = await http("POST", `/vagas/${vagaEst.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "So Medio", email: `med.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+await http("POST", `/vagas/${vagaEst.json?.codVag}/candidaturas`, {
+  candidato: { nomeCand: "Nao Informou", email: `nada.${rodada}@mail.com` }, codCanal: canal.json?.codCanal,
+}, tokenA2);
+
+const tkSup = (await http("POST", `/candidaturas/${cdtSup.json?.codCdt}/link-acompanhamento`, {}, tokenA2)).json?.tokenPub;
+const tkMed = (await http("POST", `/candidaturas/${cdtMed.json?.codCdt}/link-acompanhamento`, {}, tokenA2)).json?.tokenPub;
+
+await http("PATCH", `/portal/candidato/${tkSup}/estruturados`, {
+  pretensaoSalarial: 6000, pretensaoNegociavel: "S", dispTipo: "IMEDIATA",
+});
+await http("POST", `/portal/candidato/${tkSup}/formacoes`, { nivel: "SUPERIOR", curso: "Sistemas", situacao: "CONCLUIDO" });
+await http("PATCH", `/portal/candidato/${tkMed}/estruturados`, {
+  pretensaoSalarial: 12000, dispTipo: "AVISO_PREVIO", dispAvisoDias: 30,
+});
+await http("POST", `/portal/candidato/${tkMed}/formacoes`, { nivel: "MEDIO", situacao: "CONCLUIDO" });
+// Superior em andamento não pode contar como superior concluído.
+await http("POST", `/portal/candidato/${tkMed}/formacoes`, { nivel: "SUPERIOR", situacao: "CURSANDO" });
+
+const estruturados = await http("GET", `/portal/candidato/${tkSup}/estruturados`);
+verificar(
+  "candidato informa pretensão, disponibilidade e formação pelo portal",
+  Number(estruturados.json?.pretensaoSalarial) === 6000 &&
+    estruturados.json?.dispTipo === "IMEDIATA" &&
+    estruturados.json?.formacoes?.length === 1,
+);
+verificar(
+  "PATCH parcial não apaga o que já estava preenchido",
+  (await http("PATCH", `/portal/candidato/${tkSup}/estruturados`, { dispTipo: "IMEDIATA" })).status === 200 &&
+    Number((await http("GET", `/portal/candidato/${tkSup}/estruturados`)).json?.pretensaoSalarial) === 6000,
+);
+verificar(
+  "nível de formação inválido é recusado → 400",
+  (await http("POST", `/portal/candidato/${tkSup}/formacoes`, { nivel: "PHD" })).status === 400,
+);
+
+const porFormacao = await http("GET", `/vagas/${vagaEst.json?.codVag}/candidaturas?formacaoMin=SUPERIOR`, null, tokenA2);
+verificar(
+  "filtro por formação mínima traz só quem CONCLUIU o nível (cursando não conta)",
+  porFormacao.json?.total === 1 && porFormacao.json.itens[0].candidato.nomeCand === "Com Superior",
+);
+
+const porPretensao = await http("GET", `/vagas/${vagaEst.json?.codVag}/candidaturas?pretensaoMax=8000`, null, tokenA2);
+const nomesPretensao = porPretensao.json?.itens?.map((i) => i.candidato.nomeCand) ?? [];
+verificar(
+  "filtro por pretensão exclui quem pede acima do teto",
+  !nomesPretensao.includes("So Medio"),
+);
+// Ausência de dado não pode sumir da lista: o recrutador precisa ver para pedir.
+verificar(
+  "quem não informou pretensão continua aparecendo no filtro",
+  nomesPretensao.includes("Nao Informou") && nomesPretensao.includes("Com Superior"),
+);
+
+const porDisp = await http("GET", `/vagas/${vagaEst.json?.codVag}/candidaturas?dispTipo=IMEDIATA`, null, tokenA2);
+verificar(
+  "filtro por disponibilidade imediata",
+  porDisp.json?.total === 1 && porDisp.json.itens[0].candidato.nomeCand === "Com Superior",
+);
+
+const detEst = await http("GET", `/candidaturas/${cdtMed.json?.codCdt}`, null, tokenA2);
+verificar(
+  "detalhe traz formações e o rótulo pronto de disponibilidade",
+  detEst.json?.candidato?.formacoes?.length === 2 &&
+    detEst.json?.disponibilidadeRotulo === "Após aviso prévio (30 dias)",
+);
+
+const formacaoOutro = (await http("GET", `/portal/candidato/${tkMed}/estruturados`)).json.formacoes[0].codFor;
+verificar(
+  "um token não remove a formação de outro candidato",
+  (await http("DELETE", `/portal/candidato/${tkSup}/formacoes/${formacaoOutro}`)).status === 400,
+);
+
 // 25c. Entrevistas (RN-REC-015)
 const vagaEnt = await http("POST", "/vagas", { codEmp: cadA.json?.codEmp, titulo: "Vaga Entrevista" }, tokenA2);
 await http("PATCH", `/vagas/${vagaEnt.json?.codVag}/status`, { acao: "enviar_aprovacao" }, tokenA2);
