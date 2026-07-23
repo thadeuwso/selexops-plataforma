@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
 import { progressoDoPlano } from './pdi';
-import { notaFinal } from './avaliacao-desempenho';
+import { resolverAvaliacao } from './nota-avaliacao';
 import { calcularAderencia, ResultadoAderencia, SinaisAderencia } from './aderencia';
 
 type ReqAut = Request & { usuario: UsuarioAutenticado };
@@ -53,6 +53,7 @@ async function montarSinais(tx: Tx, filtro?: bigint): Promise<SinaisFun[]> {
     select: {
       codFun: true,
       notas: { select: { codComp: true, nota: true } },
+      participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
       ciclo: { select: { nome: true, competencias: { select: { codComp: true, nome: true, peso: true } } } },
     },
   });
@@ -80,14 +81,12 @@ async function montarSinais(tx: Tx, filtro?: bigint): Promise<SinaisFun[]> {
     let lacunas: string[] = [];
     let ultimoCiclo: string | null = null;
     if (aval) {
-      const pesos = new Map(aval.ciclo.competencias.map((c) => [c.codComp.toString(), c.peso]));
       const nomes = new Map(aval.ciclo.competencias.map((c) => [c.codComp.toString(), c.nome]));
-      ultimaNotaDesempenho = notaFinal(
-        aval.notas.map((n) => ({ nota: n.nota, peso: pesos.get(n.codComp.toString()) ?? 1 })),
-      );
-      lacunas = aval.notas
-        .filter((n) => n.nota <= 2)
-        .map((n) => nomes.get(n.codComp.toString()) ?? '')
+      const resolvida = resolverAvaliacao(aval.ciclo.competencias, aval.notas, aval.participantes);
+      ultimaNotaDesempenho = resolvida.notaFinal;
+      lacunas = [...resolvida.porCompetencia.entries()]
+        .filter(([, nota]) => nota <= 2)
+        .map(([chaveComp]) => nomes.get(chaveComp) ?? '')
         .filter(Boolean);
       ultimoCiclo = aval.ciclo.nome;
     }

@@ -3,7 +3,8 @@ import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
-import { notaFinal, podeConcluir } from './avaliacao-desempenho';
+import { podeConcluir } from './avaliacao-desempenho';
+import { resolverAvaliacao } from './nota-avaliacao';
 
 const esquemaCiclo = z.object({
   nome: z.string().min(2).max(160),
@@ -115,12 +116,14 @@ export class AvaliacaoDesempenhoController {
           funcionario: { select: { nomeFun: true } },
           ciclo: { select: { nome: true, competencias: { select: { codComp: true, peso: true } } } },
           notas: { select: { codComp: true, nota: true } },
+          participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
         },
       });
-      const notaDe = (comps: { codComp: bigint; peso: number }[], notas: { codComp: bigint; nota: number }[]) => {
-        const pesos = new Map(comps.map((c) => [c.codComp.toString(), c.peso]));
-        return notaFinal(notas.map((n) => ({ nota: n.nota, peso: pesos.get(n.codComp.toString()) ?? 1 })));
-      };
+      const notaDe = (
+        comps: { codComp: bigint; peso: number }[],
+        notas: { codComp: bigint; nota: number }[],
+        participantes: { peso: number; notas: { codComp: bigint; nota: number }[] }[],
+      ) => resolverAvaliacao(comps, notas, participantes).notaFinal;
       const concluidas = abertas.filter((a) => a.status === 'CONCLUIDA');
       const avaliacao = {
         total: abertas.length,
@@ -132,7 +135,7 @@ export class AvaliacaoDesempenhoController {
           nomeFun: a.funcionario.nomeFun,
           ciclo: a.ciclo.nome,
           dhConclusao: a.dhConclusao,
-          notaFinal: notaDe(a.ciclo.competencias, a.notas),
+          notaFinal: notaDe(a.ciclo.competencias, a.notas, a.participantes),
         })),
       };
 
@@ -143,11 +146,12 @@ export class AvaliacaoDesempenhoController {
           codFun: true,
           ciclo: { select: { competencias: { select: { codComp: true, peso: true } } } },
           notas: { select: { codComp: true, nota: true } },
+          participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
         },
       });
       const notasPorFun = new Map<string, number[]>();
       for (const a of concluidasTodas) {
-        const nf = notaDe(a.ciclo.competencias, a.notas);
+        const nf = notaDe(a.ciclo.competencias, a.notas, a.participantes);
         if (nf !== null) {
           const arr = notasPorFun.get(a.codFun.toString()) ?? [];
           arr.push(nf);
@@ -246,13 +250,13 @@ export class AvaliacaoDesempenhoController {
               funcionario: { select: { nomeFun: true, numCad: true } },
               avaliador: { select: { nomeUsu: true } },
               notas: { select: { codComp: true, nota: true } },
+              participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
             },
           },
         },
       });
       if (!ciclo) throw new NotFoundException('Ciclo inexistente neste tenant');
 
-      const pesoPorComp = new Map(ciclo.competencias.map((c) => [c.codComp.toString(), c.peso]));
       const totalComp = ciclo.competencias.length;
 
       return {
@@ -264,10 +268,7 @@ export class AvaliacaoDesempenhoController {
         status: ciclo.status,
         competencias: ciclo.competencias,
         avaliacoes: ciclo.avaliacoes.map((a) => {
-          const itens = a.notas.map((n) => ({
-            nota: n.nota,
-            peso: pesoPorComp.get(n.codComp.toString()) ?? 1,
-          }));
+          const resolvida = resolverAvaliacao(ciclo.competencias, a.notas, a.participantes);
           return {
             codAval: a.codAval,
             codFun: a.codFun,
@@ -275,8 +276,8 @@ export class AvaliacaoDesempenhoController {
             avaliador: a.avaliador,
             status: a.status,
             dhConclusao: a.dhConclusao,
-            notaFinal: notaFinal(itens),
-            competenciasComNota: a.notas.length,
+            notaFinal: resolvida.notaFinal,
+            competenciasComNota: resolvida.porCompetencia.size,
             totalCompetencias: totalComp,
           };
         }),
@@ -350,7 +351,7 @@ export class AvaliacaoDesempenhoController {
       if (!ciclo) throw new NotFoundException('Ciclo inexistente neste tenant');
       if (ciclo.status === 'ENCERRADO') throw new BadRequestException('Ciclo encerrado não aceita novos avaliados');
 
-      const func = await tx.funcionario.findFirst({ where: { codFun: dados.codFun, ativo: 'S' } });
+      const func = await tx.funcionario.findFirst({ where: { codFun: dados.codFun, ativo: 'S' }, select: { codFun: true, codCar: true } });
       if (!func) throw new BadRequestException('Funcionário inexistente neste tenant');
 
       // Uma avaliação por funcionário por ciclo — não avaliar a mesma pessoa duas
@@ -360,7 +361,7 @@ export class AvaliacaoDesempenhoController {
       });
       if (jaTem) throw new BadRequestException('Funcionário já está neste ciclo');
 
-      return tx.avaliacaoDesempenho.create({
+      const avaliacao = await tx.avaliacaoDesempenho.create({
         data: {
           codTen: req.usuario.codTen,
           codCiclo: ciclo.codCiclo,
@@ -369,6 +370,27 @@ export class AvaliacaoDesempenhoController {
           codUsuInc: req.usuario.codUsu,
         },
       });
+
+      // 360 configurável por cargo (RN-GP-025): se o cargo do funcionário tem
+      // modelo, instancia um participante por tipo (sem pessoa ainda). Cargo sem
+      // modelo mantém a avaliação de avaliador único de sempre.
+      if (func.codCar) {
+        const modelo = await tx.modeloAvaliacao360.findFirst({
+          where: { codCar: func.codCar, ativo: 'S' },
+          include: { avaliadores: { where: { ativo: 'S' } } },
+        });
+        if (modelo && modelo.avaliadores.length > 0) {
+          await tx.participanteAvaliacao.createMany({
+            data: modelo.avaliadores.map((a) => ({
+              codTen: req.usuario.codTen,
+              codAval: avaliacao.codAval,
+              tipo: a.tipo,
+              peso: a.peso,
+            })),
+          });
+        }
+      }
+      return avaliacao;
     });
   }
 
@@ -384,20 +406,17 @@ export class AvaliacaoDesempenhoController {
           ciclo: { select: { nome: true, dtInicio: true, dtFim: true, status: true, competencias: { select: { codComp: true, peso: true } } } },
           avaliador: { select: { nomeUsu: true } },
           notas: { select: { codComp: true, nota: true } },
+          participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
         },
       });
-      return avals.map((a) => {
-        const pesos = new Map(a.ciclo.competencias.map((c) => [c.codComp.toString(), c.peso]));
-        const itens = a.notas.map((n) => ({ nota: n.nota, peso: pesos.get(n.codComp.toString()) ?? 1 }));
-        return {
-          codAval: a.codAval,
-          ciclo: { nome: a.ciclo.nome, dtInicio: a.ciclo.dtInicio, dtFim: a.ciclo.dtFim, status: a.ciclo.status },
-          avaliador: a.avaliador,
-          status: a.status,
-          dhConclusao: a.dhConclusao,
-          notaFinal: notaFinal(itens),
-        };
-      });
+      return avals.map((a) => ({
+        codAval: a.codAval,
+        ciclo: { nome: a.ciclo.nome, dtInicio: a.ciclo.dtInicio, dtFim: a.ciclo.dtFim, status: a.ciclo.status },
+        avaliador: a.avaliador,
+        status: a.status,
+        dhConclusao: a.dhConclusao,
+        notaFinal: resolverAvaliacao(a.ciclo.competencias, a.notas, a.participantes).notaFinal,
+      }));
     });
   }
 
@@ -419,10 +438,12 @@ export class AvaliacaoDesempenhoController {
             },
           },
           notas: true,
+          participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
         },
       });
       if (!aval) throw new NotFoundException('Avaliação inexistente neste tenant');
 
+      const resolvida = resolverAvaliacao(aval.ciclo.competencias, aval.notas, aval.participantes);
       const notaPorComp = new Map(aval.notas.map((n) => [n.codComp.toString(), n]));
       const competencias = aval.ciclo.competencias.map((c) => {
         const n = notaPorComp.get(c.codComp.toString());
@@ -431,23 +452,24 @@ export class AvaliacaoDesempenhoController {
           nome: c.nome,
           descricao: c.descricao,
           peso: c.peso,
-          nota: n?.nota ?? null,
+          // Nota resolvida (single ou consolidada 360); comentário só no modo single.
+          nota: resolvida.porCompetencia.get(c.codComp.toString()) ?? null,
           comentario: n?.comentario ?? null,
         };
       });
-      const itens = competencias.filter((c) => c.nota !== null).map((c) => ({ nota: c.nota as number, peso: c.peso }));
 
       return {
         codAval: aval.codAval,
         funcionario: aval.funcionario,
         avaliador: aval.avaliador,
         status: aval.status,
+        modo: resolvida.modo,
         comentarioGeral: aval.comentarioGeral,
         dhConclusao: aval.dhConclusao,
         ciclo: { codCiclo: aval.ciclo.codCiclo, nome: aval.ciclo.nome, status: aval.ciclo.status },
         competencias,
-        notaFinal: notaFinal(itens),
-        podeConcluir: podeConcluir(competencias.length, itens.length),
+        notaFinal: resolvida.notaFinal,
+        podeConcluir: podeConcluir(competencias.length, resolvida.porCompetencia.size),
       };
     });
   }

@@ -2137,6 +2137,64 @@ verificar(
   (await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, { acao: "x intruso" }, tokenB)).status === 400,
 );
 
+// 37. Avaliação 360 configurável por cargo (RN-GP-025)
+const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
+verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);
+const fun360 = await http("POST", "/funcionarios", {
+  codEmp: cadA.json?.codEmp, numCad: 7360, nomeFun: "Funcionário 360",
+  dtAdm: "2026-07-01", tipoContrato: "CLT", codCar: cargo360.json?.codCar,
+}, tokenA2);
+verificar("cria funcionário com cargo 360 (201)", fun360.status === 201);
+
+// Modelo 360 do cargo: AUTO (peso 1) + GESTOR (peso 3)
+const putMod = await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, {
+  avaliadores: [{ tipo: "AUTO", peso: 1 }, { tipo: "GESTOR", peso: 3 }],
+}, tokenA2);
+verificar("configura modelo 360 do cargo (ok)", putMod.json?.ok === true);
+const getMod = await http("GET", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, null, tokenA2);
+verificar("modelo 360 traz os 2 tipos com peso", getMod.json?.modelo?.avaliadores?.length === 2);
+// Remoção soft: tirar AUTO deixa só GESTOR
+await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, { avaliadores: [{ tipo: "GESTOR", peso: 3 }] }, tokenA2);
+verificar("retirar um tipo é soft-remove (fica 1)", (await http("GET", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, null, tokenA2)).json?.modelo?.avaliadores?.length === 1);
+// Restaura os 2 para o teste de consolidação
+await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/modelo-360`, { avaliadores: [{ tipo: "AUTO", peso: 1 }, { tipo: "GESTOR", peso: 3 }] }, tokenA2);
+
+// Ciclo com 1 competência, aberto, e o funcionário 360 enturmado
+const ciclo360 = await http("POST", "/gestao-pessoas/ciclos", { nome: "Ciclo 360", dtInicio: "2026-07-01", dtFim: "2026-12-31" }, tokenA2);
+const comp360 = await http("POST", `/gestao-pessoas/ciclos/${ciclo360.json?.codCiclo}/competencias`, { nome: "Entrega", peso: 1 }, tokenA2);
+await http("PATCH", `/gestao-pessoas/ciclos/${ciclo360.json?.codCiclo}`, { status: "ABERTO" }, tokenA2);
+const aval360 = await http("POST", `/gestao-pessoas/ciclos/${ciclo360.json?.codCiclo}/avaliacoes`, { codFun: fun360.json?.codFun }, tokenA2);
+verificar("enturmar funcionário 360 (201)", aval360.status === 201);
+
+const parts = await http("GET", `/gestao-pessoas/avaliacoes/${aval360.json?.codAval}/participantes`, null, tokenA2);
+verificar("participantes instanciados do modelo do cargo (2)", parts.json?.participantes?.length === 2);
+const partAuto = parts.json?.participantes?.find((p) => p.tipo === "AUTO");
+const partGestor = parts.json?.participantes?.find((p) => p.tipo === "GESTOR");
+
+// AUTO dá 3, GESTOR dá 5 → consolidada (3*1 + 5*3)/4 = 4.5
+await http("PATCH", `/gestao-pessoas/participantes/${partAuto?.codAvalPart}/notas`, { codComp: comp360.json?.codComp, nota: 3 }, tokenA2);
+await http("PATCH", `/gestao-pessoas/participantes/${partGestor?.codAvalPart}/notas`, { codComp: comp360.json?.codComp, nota: 5 }, tokenA2);
+const parts2 = await http("GET", `/gestao-pessoas/avaliacoes/${aval360.json?.codAval}/participantes`, null, tokenA2);
+verificar("nota final 360 é a consolidação ponderada por tipo (4.5)", parts2.json?.modo === "360" && parts2.json?.notaFinal === 4.5);
+
+const comp360view = await http("GET", `/gestao-pessoas/colaboradores/${fun360.json?.codFun}/competencias`, null, tokenA2);
+const linha = comp360view.json?.competencias?.[0];
+verificar(
+  "comparação entre avaliadores: consolidada 4.5, dispersão 2, alerta divergente",
+  comp360view.json?.modo === "360" && linha?.notaConsolidada === 4.5 && linha?.dispersao === 2 && linha?.alerta === "Percepções divergentes",
+);
+const painel360view = await http("GET", `/gestao-pessoas/colaboradores/${fun360.json?.codFun}/360`, null, tokenA2);
+verificar("agregador 360 reflete a nota consolidada (4.5)", painel360view.json?.avaliacao?.notaAtual === 4.5);
+
+verificar(
+  "participante não aceita nota fora da escala → 400",
+  (await http("PATCH", `/gestao-pessoas/participantes/${partAuto?.codAvalPart}/notas`, { codComp: comp360.json?.codComp, nota: 9 }, tokenA2)).status === 400,
+);
+verificar(
+  "tenant B não vê participantes da avaliação do tenant A → 404",
+  (await http("GET", `/gestao-pessoas/avaliacoes/${aval360.json?.codAval}/participantes`, null, tokenB)).status === 404,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

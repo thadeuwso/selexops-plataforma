@@ -74,6 +74,10 @@ model Tenant {
   avaliacoesDesemp  AvaliacaoDesempenho[]
   notasCompetencia  NotaCompetencia[]
   proximasAcoes     ProximaAcao[]
+  modelos360        ModeloAvaliacao360[]
+  modeloAvaliadores360 ModeloAvaliador360[]
+  participantesAval ParticipanteAvaliacao[]
+  notasParticipante NotaParticipante[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -143,6 +147,7 @@ model Cargo {
   tenant       Tenant        @relation(fields: [codTen], references: [codTen])
   funcionarios Funcionario[]
   vagas        Vaga[]
+  modelos360   ModeloAvaliacao360[]
 
   @@unique([codTen, nomeCar])
   @@map("TFPCAR")
@@ -295,6 +300,7 @@ model Usuario {
   pdisResp    PlanoDesenvolvimento[] @relation("PdiResponsavel")
   feedbacksAutor Feedback[]          @relation("FeedbackAutor")
   avaliacoesFeitas AvaliacaoDesempenho[] @relation("AvaliadorDesempenho")
+  participacoesAval ParticipanteAvaliacao[] @relation("ParticipanteAvaliador")
   proximasAcoesResp ProximaAcao[]       @relation("ProximaAcaoResp")
   favoritas   CandidaturaFavorita[]
   filtrosSalvos FiltroSalvo[]
@@ -1005,6 +1011,7 @@ model CompetenciaCiclo {
   tenant Tenant         @relation(fields: [codTen], references: [codTen])
   ciclo  CicloAvaliacao @relation(fields: [codCiclo], references: [codCiclo])
   notas  NotaCompetencia[]
+  notasParticipante NotaParticipante[]
 
   @@index([codTen, codCiclo])
   @@map("TGPCOMP")
@@ -1036,6 +1043,7 @@ model AvaliacaoDesempenho {
   funcionario Funcionario    @relation(fields: [codFun], references: [codFun])
   avaliador   Usuario?       @relation("AvaliadorDesempenho", fields: [codUsuAvaliador], references: [codUsu])
   notas       NotaCompetencia[]
+  participantes ParticipanteAvaliacao[]
 
   @@unique([codCiclo, codFun])
   @@index([codTen, codCiclo])
@@ -1099,6 +1107,99 @@ model ProximaAcao {
 
   @@index([codTen, codFun, status])
   @@map("TGPPROX")
+}
+
+/// Modelo de avaliação 360 por cargo (performance-360, RN-GP-025).
+///
+/// A empresa define, por **cargo**, como a avaliação 360 funciona — quais tipos
+/// de avaliador participam e o peso de cada um. Espelha o idioma "config por X
+/// com padrão" já usado no recrutamento (perfil por vaga + padrão). Cargo sem
+/// modelo cai no comportamento de avaliador único de sempre.
+model ModeloAvaliacao360 {
+  codMod    BigInt   @id @default(autoincrement()) @map("CODMOD")
+  codTen    BigInt   @map("CODTEN")
+  codCar    BigInt   @map("CODCAR")
+  nome      String   @map("NOME")
+  ativo     String   @default("S") @map("ATIVO") @db.Char(1)
+  dhInc     DateTime @default(now()) @map("DHINC")
+  codUsuInc BigInt?  @map("CODUSUINC")
+  dhAlt     DateTime @updatedAt @map("DHALT")
+
+  tenant      Tenant               @relation(fields: [codTen], references: [codTen])
+  cargo       Cargo                @relation(fields: [codCar], references: [codCar])
+  avaliadores ModeloAvaliador360[]
+
+  @@unique([codTen, codCar])
+  @@map("TGPMOD360")
+}
+
+/// Tipo de avaliador de um modelo 360 (RN-GP-025).
+model ModeloAvaliador360 {
+  codModAval  BigInt @id @default(autoincrement()) @map("CODMODAVAL")
+  codTen      BigInt @map("CODTEN")
+  codMod      BigInt @map("CODMOD")
+  /// AUTO | GESTOR | PAR | LIDERADO | COMITE | CLIENTE_INTERNO
+  tipo        String @map("TIPO")
+  peso        Int    @default(1) @map("PESO")
+  obrigatorio String @default("S") @map("OBRIGATORIO") @db.Char(1)
+  /// "N" quando o tipo foi retirado do modelo (sem DELETE — soft-remove).
+  ativo       String @default("S") @map("ATIVO") @db.Char(1)
+
+  tenant Tenant             @relation(fields: [codTen], references: [codTen])
+  modelo ModeloAvaliacao360 @relation(fields: [codMod], references: [codMod])
+
+  @@unique([codMod, tipo])
+  @@map("TGPMOD360AVAL")
+}
+
+/// Participante de uma avaliação 360 (RN-GP-025).
+///
+/// Instanciado a partir do modelo do cargo ao enturmar o funcionário; a empresa
+/// atribui a **pessoa** (`codUsuAvaliador`) a cada participante. Cada um lança
+/// suas notas em `NotaParticipante`; a nota final é a consolidação ponderada
+/// (ver `notaConsolidada360`), sempre derivada.
+model ParticipanteAvaliacao {
+  codAvalPart     BigInt    @id @default(autoincrement()) @map("CODAVALPART")
+  codTen          BigInt    @map("CODTEN")
+  codAval         BigInt    @map("CODAVAL")
+  tipo            String    @map("TIPO")
+  peso            Int       @default(1) @map("PESO")
+  /// Pessoa que avalia — FK p/ TSIUSU. Nulo = ainda não atribuído.
+  codUsuAvaliador BigInt?   @map("CODUSUAVALIADOR")
+  /// PENDENTE | EM_ANDAMENTO | CONCLUIDA
+  status          String    @default("PENDENTE") @map("STATUS")
+  dhConclusao     DateTime? @map("DHCONCLUSAO")
+  dhInc           DateTime  @default(now()) @map("DHINC")
+  dhAlt           DateTime  @updatedAt @map("DHALT")
+
+  tenant    Tenant              @relation(fields: [codTen], references: [codTen])
+  avaliacao AvaliacaoDesempenho @relation(fields: [codAval], references: [codAval])
+  avaliador Usuario?            @relation("ParticipanteAvaliador", fields: [codUsuAvaliador], references: [codUsu])
+  notas     NotaParticipante[]
+
+  @@index([codTen, codAval])
+  @@map("TGPAVALPART")
+}
+
+/// Nota de um participante 360 numa competência (RN-GP-025). Tabela paralela a
+/// `NotaCompetencia` (avaliador único) — mantém o caminho simples intocado.
+model NotaParticipante {
+  codNotaPart BigInt   @id @default(autoincrement()) @map("CODNOTAPART")
+  codTen      BigInt   @map("CODTEN")
+  codAvalPart BigInt   @map("CODAVALPART")
+  codComp     BigInt   @map("CODCOMP")
+  /// 1 a 5.
+  nota        Int      @map("NOTA")
+  comentario  String?  @map("COMENTARIO") @db.Text
+  dhAlt       DateTime @updatedAt @map("DHALT")
+
+  tenant       Tenant                @relation(fields: [codTen], references: [codTen])
+  participante ParticipanteAvaliacao @relation(fields: [codAvalPart], references: [codAvalPart])
+  competencia  CompetenciaCiclo      @relation(fields: [codComp], references: [codComp])
+
+  @@unique([codAvalPart, codComp])
+  @@index([codTen, codAvalPart])
+  @@map("TGPNOTAPART")
 }
 
 /// Proposta ao candidato (RN-REC-018).

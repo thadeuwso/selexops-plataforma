@@ -9,6 +9,7 @@ import { FeedbackController } from './feedback.controller';
 import { AvaliacaoDesempenhoController } from './avaliacao-desempenho.controller';
 import { AderenciaController } from './aderencia.controller';
 import { Colaborador360Controller } from './colaborador-360.controller';
+import { Avaliacao360Controller } from './avaliacao-360.controller';
 
 @Module({
   controllers: [
@@ -22,6 +23,7 @@ import { Colaborador360Controller } from './colaborador-360.controller';
     AvaliacaoDesempenhoController,
     AderenciaController,
     Colaborador360Controller,
+    Avaliacao360Controller,
   ],
 })
 export class GestaoPessoasModule {}

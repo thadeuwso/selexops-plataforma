@@ -3,10 +3,10 @@ import type { Request } from 'express';
 import { ZodError, z } from 'zod';
 import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard';
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
-import { notaFinal } from './avaliacao-desempenho';
 import { progressoDoPlano } from './pdi';
 import { calcularAderencia } from './aderencia';
 import { classificacaoDesempenho, distribuicaoPorFaixa } from './desempenho-360';
+import { resolverAvaliacao } from './nota-avaliacao';
 
 type ReqAut = Request & { usuario: UsuarioAutenticado };
 
@@ -87,6 +87,7 @@ export class Colaborador360Controller {
             },
           },
           notas: { select: { codComp: true, nota: true } },
+          participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
         },
       });
 
@@ -107,20 +108,17 @@ export class Colaborador360Controller {
           select: {
             ciclo: { select: { nome: true, competencias: { select: { codComp: true, peso: true } } } },
             notas: { select: { codComp: true, nota: true } },
+            participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
           },
         }),
       ]);
 
-      const notaDe = (
-        comps: { codComp: bigint; peso: number }[],
-        notas: { codComp: bigint; nota: number }[],
-      ) => {
-        const pesos = new Map(comps.map((c) => [c.codComp.toString(), c.peso]));
-        return notaFinal(notas.map((n) => ({ nota: n.nota, peso: pesos.get(n.codComp.toString()) ?? 1 })));
-      };
-
-      const notaAtual = avaliacao ? notaDe(avaliacao.ciclo.competencias, avaliacao.notas) : null;
-      const notas2 = avaliacoesConcluidas.map((a) => notaDe(a.ciclo.competencias, a.notas));
+      const notaAtual = avaliacao
+        ? resolverAvaliacao(avaliacao.ciclo.competencias, avaliacao.notas, avaliacao.participantes).notaFinal
+        : null;
+      const notas2 = avaliacoesConcluidas.map(
+        (a) => resolverAvaliacao(a.ciclo.competencias, a.notas, a.participantes).notaFinal,
+      );
       const notaAnterior = notas2.length >= 2 ? notas2[1] : null;
       const tendencia =
         notaAtual !== null && notaAnterior !== null
@@ -209,13 +207,7 @@ export class Colaborador360Controller {
   async desempenho(@Req() req: ReqAut, @Param('codFun') codFunParam: string) {
     const codFun = BigInt(codFunParam);
     return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
-      const notaDe = (
-        comps: { codComp: bigint; peso: number }[],
-        notas: { codComp: bigint; nota: number }[],
-      ) => {
-        const pesos = new Map(comps.map((c) => [c.codComp.toString(), c.peso]));
-        return notaFinal(notas.map((n) => ({ nota: n.nota, peso: pesos.get(n.codComp.toString()) ?? 1 })));
-      };
+      const partSel = { select: { peso: true, notas: { select: { codComp: true, nota: true } } } } as const;
 
       // Avaliação mais recente (qualquer status) — base de distribuição/destaques.
       const atual = await tx.avaliacaoDesempenho.findFirst({
@@ -224,6 +216,7 @@ export class Colaborador360Controller {
         select: {
           ciclo: { select: { competencias: { select: { codComp: true, nome: true, peso: true } } } },
           notas: { select: { codComp: true, nota: true } },
+          participantes: partSel,
         },
       });
 
@@ -234,21 +227,24 @@ export class Colaborador360Controller {
         select: {
           ciclo: { select: { nome: true, dtFim: true, competencias: { select: { codComp: true, peso: true } } } },
           notas: { select: { codComp: true, nota: true } },
+          participantes: partSel,
         },
       });
       const evolucao = concluidas
-        .map((a) => ({ ciclo: a.ciclo.nome, dtFim: a.ciclo.dtFim, nota: notaDe(a.ciclo.competencias, a.notas) }))
-        .filter((e) => e.nota !== null);
+        .map((a) => ({ ciclo: a.ciclo.nome, dtFim: a.ciclo.dtFim, nota: resolverAvaliacao(a.ciclo.competencias, a.notas, a.participantes).notaFinal }))
+        .filter((e): e is { ciclo: string; dtFim: Date; nota: number } => e.nota !== null);
 
-      const notaAtual = atual ? notaDe(atual.ciclo.competencias, atual.notas) : null;
+      const resolvidaAtual = atual
+        ? resolverAvaliacao(atual.ciclo.competencias, atual.notas, atual.participantes)
+        : null;
+      const notaAtual = resolvidaAtual?.notaFinal ?? null;
       const notaAnterior = evolucao.length >= 2 ? evolucao[evolucao.length - 2].nota : null;
       const tendencia =
         notaAtual !== null && notaAnterior !== null ? Math.round((notaAtual - notaAnterior) * 10) / 10 : null;
 
-      // Competências avaliadas da avaliação atual (nome + nota) → distribuição/destaques.
-      const notaPorComp = new Map((atual?.notas ?? []).map((n) => [n.codComp.toString(), n.nota]));
+      // Competências avaliadas da avaliação atual (nome + nota resolvida) → distribuição/destaques.
       const avaliadas = (atual?.ciclo.competencias ?? [])
-        .map((c) => ({ competencia: c.nome, nota: notaPorComp.get(c.codComp.toString()) ?? null }))
+        .map((c) => ({ competencia: c.nome, nota: resolvidaAtual?.porCompetencia.get(c.codComp.toString()) ?? null }))
         .filter((c): c is { competencia: string; nota: number } => c.nota !== null);
 
       const ordenadas = [...avaliadas].sort((a, b) => b.nota - a.nota);
@@ -297,6 +293,7 @@ export class Colaborador360Controller {
           select: {
             ciclo: { select: { competencias: { select: { codComp: true, peso: true } } } },
             notas: { select: { codComp: true, nota: true } },
+            participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
           },
         }),
       ]);
@@ -308,9 +305,8 @@ export class Colaborador360Controller {
         (s, p) => s + p.acoes.filter((a) => a.prazo && a.prazo < hoje && a.status !== 'CONCLUIDA' && a.status !== 'CANCELADA').length,
         0,
       );
-      const pesos = new Map((ultimaConcluida?.ciclo.competencias ?? []).map((c) => [c.codComp.toString(), c.peso]));
       const ultimaNota = ultimaConcluida
-        ? notaFinal(ultimaConcluida.notas.map((n) => ({ nota: n.nota, peso: pesos.get(n.codComp.toString()) ?? 1 })))
+        ? resolverAvaliacao(ultimaConcluida.ciclo.competencias, ultimaConcluida.notas, ultimaConcluida.participantes).notaFinal
         : null;
       const aderencia = calcularAderencia({
         planosAtivos: planos.length,
@@ -371,6 +367,64 @@ export class Colaborador360Controller {
         data: { status: dados.status, dhConclusao: dados.status === 'CONCLUIDA' ? new Date() : null },
       });
       return { ok: true };
+    });
+  }
+
+  /**
+   * Competências da avaliação atual com **comparação entre avaliadores**
+   * (performance-360, Fase 5). Por competência: nota consolidada e a nota de
+   * cada tipo de avaliador (auto/gestor/par/…), a média e a maior divergência —
+   * com alertas neutros. Avaliação de avaliador único devolve uma coluna só.
+   */
+  @Get(':codFun/competencias')
+  @Permissoes('gestaopessoas.avaliacoes.ler')
+  async competencias(@Req() req: ReqAut, @Param('codFun') codFunParam: string) {
+    const codFun = BigInt(codFunParam);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const aval = await tx.avaliacaoDesempenho.findFirst({
+        where: { codFun },
+        orderBy: { codAval: 'desc' },
+        select: {
+          ciclo: { select: { nome: true, competencias: { orderBy: [{ ordem: 'asc' }, { codComp: 'asc' }], select: { codComp: true, nome: true, descricao: true, peso: true } } } },
+          notas: { select: { codComp: true, nota: true } },
+          participantes: { select: { tipo: true, peso: true, notas: { select: { codComp: true, nota: true } } } },
+        },
+      });
+      if (!aval) return { ciclo: null, modo: 'SIMPLES', tipos: [], competencias: [] };
+
+      const resolvida = resolverAvaliacao(aval.ciclo.competencias, aval.notas, aval.participantes);
+      const tipos = aval.participantes.map((p) => p.tipo);
+
+      const competencias = aval.ciclo.competencias.map((c) => {
+        const chave = c.codComp.toString();
+        // Nota por tipo de avaliador (comparação); vazio no modo simples.
+        const porTipo = aval.participantes
+          .map((p) => ({ tipo: p.tipo, nota: p.notas.find((n) => n.codComp.toString() === chave)?.nota ?? null }))
+          .filter((x): x is { tipo: string; nota: number } => x.nota !== null);
+        const notas = porTipo.map((x) => x.nota);
+        const dispersao = notas.length >= 2 ? Math.round((Math.max(...notas) - Math.min(...notas)) * 10) / 10 : null;
+        // Alerta neutro (nunca "percepção errada").
+        let alerta: string | null = null;
+        if (resolvida.modo === '360') {
+          if (porTipo.length === 0) alerta = 'Sem avaliações ainda';
+          else if (porTipo.length === 1) alerta = 'Um avaliador só';
+          else if (dispersao !== null && dispersao >= 2) alerta = 'Percepções divergentes';
+          else if (dispersao !== null && dispersao >= 1) alerta = 'Diferença moderada';
+          else alerta = 'Percepções alinhadas';
+        }
+        return {
+          codComp: c.codComp,
+          nome: c.nome,
+          descricao: c.descricao,
+          peso: c.peso,
+          notaConsolidada: resolvida.porCompetencia.get(chave) ?? null,
+          porTipo,
+          dispersao,
+          alerta,
+        };
+      });
+
+      return { ciclo: aval.ciclo.nome, modo: resolvida.modo, tipos, competencias };
     });
   }
 }

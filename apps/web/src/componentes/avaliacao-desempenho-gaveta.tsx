@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { BotaoPrimario, Erro, Gaveta } from "@/componentes/formulario";
+import { Avaliacao360Scoring } from "@/componentes/colaborador-360/avaliacao-360-scoring";
 
 interface CompetenciaNota {
   codComp: string;
@@ -44,11 +45,16 @@ export function AvaliacaoDesempenhoGaveta({
   aoMudar?: () => void;
 }) {
   const [aval, setAval] = useState<AvaliacaoDetalhe | null>(null);
+  const [ehTrezentos, setEhTrezentos] = useState<boolean | null>(null);
   const [comentarioGeral, setComentarioGeral] = useState("");
   const [erro, setErro] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     if (!codAval) return;
+    // Descobre se é 360 (tem participantes) — se for, o preenchimento é por avaliador.
+    const rp = await api<{ participantes: unknown[] }>(`/gestao-pessoas/avaliacoes/${codAval}/participantes`);
+    const tem360 = rp.status === 200 && (rp.json?.participantes.length ?? 0) > 0;
+    setEhTrezentos(tem360);
     const r = await api<AvaliacaoDetalhe>(`/gestao-pessoas/avaliacoes/${codAval}`);
     if (r.status === 200 && r.json) {
       setAval(r.json);
@@ -58,7 +64,10 @@ export function AvaliacaoDesempenhoGaveta({
 
   useEffect(() => {
     if (aberta) void carregar();
-    else setAval(null);
+    else {
+      setAval(null);
+      setEhTrezentos(null);
+    }
   }, [aberta, carregar]);
 
   const editavel = aval?.status !== "CONCLUIDA" && aval?.ciclo.status === "ABERTO";
@@ -105,8 +114,13 @@ export function AvaliacaoDesempenhoGaveta({
 
   return (
     <Gaveta titulo={aval?.funcionario?.nomeFun ?? "Avaliação"} aberta={aberta} fechar={fechar} largura={560}>
-      {!aval ? (
+      {!aval || ehTrezentos === null ? (
         <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Carregando…</p>
+      ) : ehTrezentos && codAval ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{aval.ciclo.nome}</span>
+          <Avaliacao360Scoring codAval={codAval} aoMudar={aoMudar} />
+        </div>
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
