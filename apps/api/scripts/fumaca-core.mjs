@@ -1875,6 +1875,51 @@ verificar(
   (await http("GET", `/gestao-pessoas/pdi/${pdi.json?.codPdi}`, null, tokenB)).status === 400,
 );
 
+// 31. Feedback contínuo (RN-GP-021)
+const feed1 = await http("POST", "/gestao-pessoas/feedbacks", {
+  codFun: funPdi.json?.codFun, mensagem: "Ótima condução do onboarding do time.",
+  tipo: "POSITIVO", contexto: "RECONHECIMENTO",
+}, tokenA2);
+verificar("registra feedback ao funcionário (201)", feed1.status === 201 && feed1.json?.cienteFun === null);
+
+const feedComPlano = await http("POST", "/gestao-pessoas/feedbacks", {
+  codFun: funPdi.json?.codFun, mensagem: "Avançar a leitura da arquitetura até sexta.",
+  tipo: "CONSTRUTIVO", contexto: "ACOMPANHAMENTO", codPdi: pdi.json?.codPdi,
+}, tokenA2);
+verificar("feedback pode ser vinculado a um plano", feedComPlano.status === 201);
+verificar(
+  "feedback preso ao PDI de outro funcionário é recusado → 400",
+  (await http("POST", "/gestao-pessoas/feedbacks", {
+    codFun: funPdi.json?.codFun, mensagem: "x", codPdi: 999999,
+  }, tokenA2)).status === 400,
+);
+verificar(
+  "feedback exige mensagem — vazio é recusado → 400",
+  (await http("POST", "/gestao-pessoas/feedbacks", { codFun: funPdi.json?.codFun, mensagem: "" }, tokenA2)).status === 400,
+);
+
+const listaFeed = await http("GET", `/gestao-pessoas/feedbacks?codFun=${funPdi.json?.codFun}`, null, tokenA2);
+verificar(
+  "lista traz os feedbacks do mais recente ao mais antigo, com autor",
+  listaFeed.json?.length === 2 && listaFeed.json[0].codFeed === feedComPlano.json?.codFeed && !!listaFeed.json[0].autor?.nomeUsu,
+);
+verificar(
+  "feedback ligado a plano traz o título do plano",
+  listaFeed.json?.find((f) => f.codFeed === feedComPlano.json?.codFeed)?.plano?.titulo === "Integração e primeiros 90 dias",
+);
+verificar("listar feedback sem funcionário → 400", (await http("GET", "/gestao-pessoas/feedbacks", null, tokenA2)).status === 400);
+
+const ciencia = await http("PATCH", `/gestao-pessoas/feedbacks/${feed1.json?.codFeed}/ciencia`, {}, tokenA2);
+verificar("dar ciência marca o feedback como visto", ciencia.json?.ok === true && ciencia.json?.jaCiente === false);
+verificar(
+  "dar ciência de novo é idempotente (não muda a data da primeira vez)",
+  (await http("PATCH", `/gestao-pessoas/feedbacks/${feed1.json?.codFeed}/ciencia`, {}, tokenA2)).json?.jaCiente === true,
+);
+verificar(
+  "tenant B não vê os feedbacks do tenant A",
+  (await http("GET", `/gestao-pessoas/feedbacks?codFun=${funPdi.json?.codFun}`, null, tokenB)).json?.length === 0,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

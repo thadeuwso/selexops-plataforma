@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Abas, BotaoPrimario, Campo, Entrada, Gaveta, Selecao } from "./formulario";
-import { PdiFuncionario } from "@/componentes/pdi-funcionario";
+import { DesenvolvimentoTabs } from "@/componentes/desenvolvimento-tabs";
 
 /**
  * Detalhe do funcionário — dá casa às três rotas que existiam no backend sem
@@ -293,7 +293,7 @@ export function FuncionarioDrawer({
             </div>
           )}
 
-          {tab === "desenvolvimento" && codFun && <PdiFuncionario codFun={codFun} />}
+          {tab === "desenvolvimento" && codFun && <DesenvolvimentoTabs codFun={codFun} />}
         </div>
       )}
     </Gaveta>

@@ -5,6 +5,7 @@ import { AvaliacaoComportamentalPublicoController } from './avaliacao-comportame
 import { PerfilComportamentalController } from './perfil-comportamental.controller';
 import { PerfilComportamentalPadraoController } from './perfil-comportamental-padrao.controller';
 import { PdiController } from './pdi.controller';
+import { FeedbackController } from './feedback.controller';
 
 @Module({
   controllers: [
@@ -14,6 +15,7 @@ import { PdiController } from './pdi.controller';
     AvaliacaoComportamentalController,
     AvaliacaoComportamentalPublicoController,
     PdiController,
+    FeedbackController,
   ],
 })
 export class GestaoPessoasModule {}
