@@ -18,9 +18,9 @@ Rota `/app/gestao-pessoas/colaboradores/[codFun]` com `layout.tsx` (cabeçalho c
 `ResumoExecutivo` + `CartaoNota` + `TendenciaDesempenho` + destaques/pontos de atenção (das competências já existentes) + `PainelProximosPassos`. Introduz **`ProximaAcao` (`TGPPROX`)** (migration incremental) — recomendação vira tarefa. Gráfico de evolução (conforme decisão B4).
 - Cria: `ProximaAcao` + endpoints de próximos passos + componentes da Visão 360.
 
-## Fase 5 — Competências e avaliadores
-Detalhe de competência (gaveta), heatmap, histórico. **Multi-rater aditivo:** `ParticipanteAvaliacao` (`TGPAVALPART`) + `NotaCompetencia.codAvalPart?`; consolidação `notaFinal` estendida (auto + gestor primeiro — decisão B3). `ComparacaoAvaliadores` com alertas neutros. **`CompetenciaCargo` (`TFPCARCOMP`)** + `AderenciaAoCargo` com faixas configuráveis.
-- Regras puras novas: consolidação 360, role-fit — com testes unitários.
+## Fase 5 — Competências e avaliadores (360 configurável por cargo)
+Detalhe de competência (gaveta), heatmap (SVG próprio), histórico. **360 configurável (B3):** `ModeloAvaliacao360` (`TGPMOD360`) + `ModeloAvaliador360` (`TGPMOD360AVAL`) — empresa define, por cargo, tipos de avaliador e pesos. `ParticipanteAvaliacao` (`TGPAVALPART`) instanciado a partir do modelo do cargo ao enturmar; empresa atribui as pessoas. `NotaCompetencia.codAvalPart?`; consolidação `notaFinal` estendida por peso de tipo. `ComparacaoAvaliadores` com alertas neutros. **`CompetenciaCargo` (`TFPCARCOMP`)** + `AderenciaAoCargo` com faixas configuráveis.
+- Regras puras novas: consolidação 360, role-fit — com testes unitários. (UI de configuração por cargo entra aqui ou em fase própria conforme tamanho.)
 
 ## Fase 6 — Metas e feedbacks
 **`Meta` (`TGPMETA`)** + **`ProgressoMeta` (`TGPMETAPROG`)**; resumo, cartões, indicadores (no prazo/atrasada/risco). Feedbacks: reusa `Feedback`, agrega enviados/recebidos, filtros, ciência. (Impacto na nota conforme B6.)
@@ -38,7 +38,7 @@ Purposes novos no gateway (`OllamaPerformanceProvider`, `MockPerformanceProvider
 Motor de regras transparente → **`Alerta` (`TGPALERTA`)**; IA só complementa a explicação. Revisão/descartar; alimenta próximos passos. Regras puras testadas.
 
 ## Fase 11 — Exportação, auditoria e segurança
-PDF (decisão B5) com seções selecionáveis + controle de acesso. Auditoria de **leitura/exportação/IA** via `LogAuditoria`. Papéis/escopos (B1): novas chaves de permissão + escopo "minha equipe" + filtro do colaborador (EMPLOYEE). Dashboard do gestor (§23).
+PDF **server-side** (decisão B5, Playwright headless) com seções selecionáveis + controle de acesso. Auditoria de **leitura/exportação/IA** via `LogAuditoria`. Papéis/escopos (B1): novas chaves de permissão + **`Departamento.codFunGestor?`** (aditivo — o gestor é o responsável do departamento) + escopo "minha equipe" (departamento e sub-árvore) + filtro do colaborador (EMPLOYEE, só o próprio 360, sem comparação nominal nem risco restrito). Dashboard do gestor (§23).
 
 ## Fase 12 — Testes, snapshot e documentação
 `ResumoSnapshot` (`TGPSNAP`) por ciclo. Cobertura: unit (evolução, comparação, role-fit, metas, PDI, alertas, acesso, isolamento, validação IA), integração (carregamento, seções, próximos passos, IA, exportação, auditoria), E2E por papel. Fechamento no vault.

@@ -1,7 +1,10 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { NIVEL } from "@/componentes/aderencia-funcionario";
+
+const rota360 = (codFun: string) => `/app/gestao-pessoas/colaboradores/${codFun}`;
 
 interface NovaContratacao {
   codFun: string;
@@ -76,13 +79,13 @@ export function DesempenhoVisaoGeral() {
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>Quem já completou</div>
             <div style={{ display: "grid", gap: 6 }}>
               {vg.avaliacao.concluidasLista.map((c) => (
-                <div key={c.codFun} style={{ display: "flex", justifyContent: "space-between", gap: 10, border: "1px solid var(--border-default)", borderRadius: 8, padding: "10px 12px" }}>
+                <Link key={c.codFun} href={rota360(c.codFun)} style={{ display: "flex", justifyContent: "space-between", gap: 10, border: "1px solid var(--border-default)", borderRadius: 8, padding: "10px 12px", textDecoration: "none", color: "var(--text-body)" }}>
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 500 }}>{c.nomeFun}</span>
                     <span style={{ fontSize: 12, color: "var(--text-muted)" }}> — {c.ciclo}</span>
                   </div>
                   <span style={{ fontSize: 15, fontWeight: 600, flexShrink: 0 }}>{c.notaFinal !== null ? c.notaFinal.toFixed(1) : "—"}</span>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -100,7 +103,7 @@ export function DesempenhoVisaoGeral() {
         ) : (
           <div style={{ display: "grid", gap: 6 }}>
             {vg.novasContratacoes.map((f) => (
-              <div key={f.codFun} style={{ display: "flex", justifyContent: "space-between", gap: 10, border: "1px solid var(--border-default)", borderRadius: 8, padding: "10px 12px" }}>
+              <Link key={f.codFun} href={rota360(f.codFun)} style={{ display: "flex", justifyContent: "space-between", gap: 10, border: "1px solid var(--border-default)", borderRadius: 8, padding: "10px 12px", textDecoration: "none", color: "var(--text-body)" }}>
                 <div>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{f.nomeFun}</span>
                   <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
@@ -108,7 +111,7 @@ export function DesempenhoVisaoGeral() {
                   </span>
                 </div>
                 <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>admitido em {data(f.dtAdm)}</span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

@@ -8,6 +8,7 @@ import { PdiController } from './pdi.controller';
 import { FeedbackController } from './feedback.controller';
 import { AvaliacaoDesempenhoController } from './avaliacao-desempenho.controller';
 import { AderenciaController } from './aderencia.controller';
+import { Colaborador360Controller } from './colaborador-360.controller';
 
 @Module({
   controllers: [
@@ -20,6 +21,7 @@ import { AderenciaController } from './aderencia.controller';
     FeedbackController,
     AvaliacaoDesempenhoController,
     AderenciaController,
+    Colaborador360Controller,
   ],
 })
 export class GestaoPessoasModule {}

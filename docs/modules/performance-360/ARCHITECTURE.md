@@ -24,10 +24,16 @@ O cabeçalho do colaborador (§5) e as abas ficam no `layout.tsx` da rota `[codF
 
 Campos comuns a toda entidade nova (adaptando §25 às convenções do projeto): `codTen`, `dhInc`/`codUsuInc`, `dhAlt`/`codUsuAlt`, `status`, `ativo` (soft-delete), e quando fizer sentido `origem` e `visibilidade` (classificação de acesso). Sem `deletedAt` cru — usamos `ativo` (padrão do projeto). `version` só onde houver edição concorrente real.
 
-### 2.1 Avaliação 360 (multi-avaliador) — evolução aditiva
-- **`ParticipanteAvaliacao` (`TGPAVALPART`)** — um por (avaliação, avaliador). Campos: `codAval`, `tipo` (AUTO|GESTOR|PAR|LIDERADO|COMITE|CLIENTE_INTERNO), `codUsuAvaliador?`/`codFunAvaliador?`, `peso`, `status`, `dhConclusao`.
+### 2.1 Avaliação 360 configurável por cargo (decisão B3) — evolução aditiva
+A empresa configura o 360 **por cargo**. Espelha o idioma "config por X com fallback padrão" já usado no recrutamento (`PerfilComportamentalVaga` + `PerfilComportamentalPadrao`).
+
+- **`ModeloAvaliacao360` (`TGPMOD360`)** — modelo de avaliação por cargo (com um padrão de tenant como fallback). Define o **tipo de avaliação** e a régua.
+- **`ModeloAvaliador360` (`TGPMOD360AVAL`)** — por modelo, **quais tipos de avaliador** participam e o **peso** de cada tipo: AUTO|GESTOR|PAR|LIDERADO|COMITE|CLIENTE_INTERNO. (Ex.: cargo de liderança inclui LIDERADO; cargo operacional, só AUTO+GESTOR.)
+- **`ParticipanteAvaliacao` (`TGPAVALPART`)** — um por (avaliação, avaliador). Ao enturmar um funcionário no ciclo, o sistema **instancia os participantes** conforme o modelo do cargo dele; a empresa/gestor **atribui as pessoas concretas** (quem são os pares, o líder, etc.). Campos: `codAval`, `tipo`, `codUsuAvaliador?`/`codFunAvaliador?`, `peso`, `status`, `dhConclusao`.
 - **`NotaCompetencia` ganha `codAvalPart?`** (nullable) — a nota passa a poder pertencer a um participante. **Ausência = comportamento atual** (avaliação de avaliador único continua funcionando).
-- `notaFinal` evolui para consolidar por tipo/peso quando há participantes; o cálculo puro atual vira o caso "um participante". Nenhum teste existente quebra.
+- `notaFinal` evolui para **consolidar por tipo/peso** quando há participantes; o cálculo puro atual vira o caso "um participante". Nenhum teste existente quebra.
+
+Fluxo: empresa define modelo por cargo → ciclo enturmar funcionário herda o modelo do cargo → atribui as pessoas → cada participante avalia → nota consolida por peso de tipo.
 
 ### 2.2 Metas — §12
 - **`Meta` (`TGPMETA`)**: `codFun`, `codCiclo?`, título, descrição, `peso`, `prazo`, `status` (PENDENTE|ANDAMENTO|CONCLUIDA|ATRASADA|CANCELADA), `impactoAvaliacao`, `codCompRelacionada?`, `codPdi?`.

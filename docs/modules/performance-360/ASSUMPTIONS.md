@@ -14,38 +14,28 @@
 5. **A chave OpenAI exposta NÃO é rotacionada agora** — decisão sua, item de checklist de pré-produção. Os purposes de desempenho rodam em `local` (Ollama) por padrão; `nuvem` só quando o tenant optar.
 6. **Reuso máximo:** Feedback/PDI/Avaliação/Aderência já prontos entram no 360 como estão; não recrio esses domínios.
 
-## B. Decisões abertas — **preciso da sua orientação**
+## B. Decisões — **resolvidas com o Thadeu (2026-07-23)**
 
-### B1. Vínculo gestor → equipe (bloqueia o papel MANAGER e o dashboard do gestor, §23/24)
-Hoje `Funcionario` não tem "gestor". O escopo "vejo só a minha equipe" precisa disso. Opções:
-- (a) Campo `codGestor` em `Funcionario` (gestor direto) — simples, cobre a maioria.
-- (b) Derivar do departamento (gestor = responsável do `Departamento`).
-- (c) Tabela de liderança dedicada (matricial, múltiplos gestores).
+### B1. Vínculo gestor → equipe — ✅ **pelo departamento**
+Gestor = responsável do departamento do funcionário. **Impacto técnico:** `Departamento` (`TFPDEP`) hoje **não tem responsável** — será preciso adicionar `codFunGestor?`/`codUsuResp?` ao departamento (mudança aditiva, na Fase 11 de papéis/escopo). O escopo "minha equipe" do gestor resolve por: funcionários cujo departamento (ou sub-árvore) tem o usuário como responsável.
 
-### B2. Perfil comportamental do colaborador (§16)
-O resultado comportamental hoje pende de convite de recrutamento. Para mostrar no 360:
-- (a) Ponte automática: se o funcionário veio de uma candidatura, ligo ao resultado existente.
-- (b) Novo fluxo: permitir iniciar uma avaliação comportamental já como funcionário (sessão employee-side).
-- (c) Ambos.
+### B2. Perfil comportamental do colaborador — proposta mantida (sem objeção): **ambos**
+(a) ponte automática quando o funcionário veio de candidatura + (b) permitir iniciar uma sessão comportamental já como funcionário. Implementado na Fase 8.
 
-### B3. Amplitude do 360 nesta primeira leva (§9)
-360 completo (auto + gestor + pares + liderados + comitê + cliente) é grande. Proposta: começar com **autoavaliação + gestor** (o que o print já sugere: "Autoavaliação + Gestor") e deixar pares/liderados/comitê como fase seguinte, com o modelo já preparado. Confirma?
+### B3. Amplitude do 360 — ✅ **360 configurável por cargo**
+Não é um conjunto fixo de avaliadores. **A empresa define, por cargo:** (1) o **tipo de avaliação** que se aplica, (2) **quais tipos de avaliador** participam (AUTO/GESTOR/PAR/LIDERADO/COMITE/CLIENTE) e seus pesos, e (3) **as pessoas** que farão a avaliação de cada colaborador. Espelha o padrão já existente no recrutamento (`PerfilComportamentalVaga` por vaga com `PerfilComportamentalPadrao` de fallback). Ver ARCHITECTURE §2.1.
 
-### B4. Gráficos (donut, linha, radar, heatmap — §8/10/28)
-Sem lib de charts no projeto. Opções:
-- (a) SVG próprio, leve, sem dependência (mantém o hand-rolled do projeto; mais trabalho por gráfico).
-- (b) Lib leve (ex. Recharts) — mais rápido, adiciona dependência e peso de bundle.
+### B4. Gráficos — ✅ **SVG próprio, sem dependência**
+Mantém o padrão hand-rolled; zero peso novo de bundle. Componentes de gráfico próprios (donut, linha, barras, heatmap; radar opcional e nunca único).
 
-### B5. Exportação PDF (§35)
-Sem gerador no projeto. Opções:
-- (a) Print CSS (janela de impressão do navegador) — zero dependência, controle visual menor.
-- (b) Geração server-side (ex. Playwright/headless já presente nos testes, ou lib PDF) — fiel ao layout, mais infra.
+### B5. Exportação PDF — ✅ **geração server-side**
+Fiel ao layout. Playwright/headless já está no projeto (testes) — reutilizar para render → PDF, com controle de acesso e seções selecionáveis.
 
-### B6. Metas: impacto na nota (§12)
-Metas podem **influenciar** a nota final ou ser apenas acompanhadas ao lado. Proposta: acompanhadas ao lado nesta leva (não mexem em `notaFinal`), com campo `impactoAvaliacao` informativo; ligar ao cálculo só quando você quiser. Confirma?
+### B6. Metas: impacto na nota — proposta mantida (sem objeção)
+Nesta leva as metas são acompanhadas ao lado (não alteram `notaFinal`); campo `impactoAvaliacao` informativo; ligação ao cálculo só quando solicitado.
 
-### B7. Potencial / 9-box (§17)
-Confirmo que é **classificação preliminar com revisão humana obrigatória**, sem automação de sucessão nesta leva (só preparar o modelo). Ok?
+### B7. Potencial / 9-box — proposta mantida (sem objeção)
+Classificação **preliminar com revisão humana obrigatória**; sucessão só preparada no modelo, sem automação.
 
 ## C. Não-objetivos desta iniciativa (explícitos)
 

@@ -2079,6 +2079,25 @@ verificar(
   (await http("GET", "/gestao-pessoas/desempenho/visao-geral", null, tokenB)).status === 200,
 );
 
+// 35. Painel 360 do Colaborador — agregador (performance-360 Fase 3)
+const p360 = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenA2);
+verificar(
+  "agregador 360 traz colaborador, avaliação, resumo e aderência",
+  p360.status === 200 &&
+    p360.json?.colaborador?.nome === "Funcionário PDI" &&
+    p360.json?.avaliacao?.notaAtual === 4 &&
+    typeof p360.json?.resumo?.planosAtivos === "number" &&
+    ["ADERENTE", "ATENCAO", "RISCO"].includes(p360.json?.aderencia?.nivel),
+);
+verificar(
+  "360 de colaborador inexistente → 400",
+  (await http("GET", "/gestao-pessoas/colaboradores/999999/360", null, tokenA2)).status === 400,
+);
+verificar(
+  "tenant B não acessa o 360 de colaborador do tenant A → 400",
+  (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenB)).status === 400,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);
