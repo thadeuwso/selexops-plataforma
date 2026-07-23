@@ -151,6 +151,7 @@ model Cargo {
   funcionarios Funcionario[]
   vagas        Vaga[]
   competenciasEsperadas CompetenciaCargo[]
+  modelos360   ModeloAvaliacao360[]
 
   @@unique([codTen, nomeCar])
   @@map("TFPCAR")
@@ -1131,6 +1132,8 @@ model ModeloAvaliacao360 {
   codEmp    BigInt?  @map("CODEMP")
   /// Escopo por departamento (nulo = todos).
   codDep    BigInt?  @map("CODDEP")
+  /// Escopo por cargo (nulo = todos). Dimensão mais específica que departamento.
+  codCar    BigInt?  @map("CODCAR")
   ativo     String   @default("S") @map("ATIVO") @db.Char(1)
   dhInc     DateTime @default(now()) @map("DHINC")
   codUsuInc BigInt?  @map("CODUSUINC")
@@ -1139,6 +1142,7 @@ model ModeloAvaliacao360 {
   tenant       Tenant               @relation(fields: [codTen], references: [codTen])
   empresa      Empresa?             @relation(fields: [codEmp], references: [codEmp])
   departamento Departamento?        @relation(fields: [codDep], references: [codDep])
+  cargo        Cargo?               @relation(fields: [codCar], references: [codCar])
   avaliadores  ModeloAvaliador360[]
   alvos        ModeloAlvo360[]
 

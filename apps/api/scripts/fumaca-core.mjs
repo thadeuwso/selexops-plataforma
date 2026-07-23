@@ -2234,6 +2234,33 @@ verificar(
   (await http("GET", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/competencias-esperadas`, null, tokenB)).status === 404,
 );
 
+// 39. Modelo 360 com escopo por CARGO (RN-GP-028)
+const modCargo = await http("POST", "/gestao-pessoas/modelos-360", {
+  nome: "Por cargo QA 360", codCar: cargo360.json?.codCar,
+  avaliadores: [{ tipo: "AUTO", peso: 1 }, { tipo: "GESTOR", peso: 2 }, { tipo: "PAR", peso: 1 }],
+}, tokenA2);
+verificar("cria modelo com escopo por cargo (ok, grau 270°)", modCargo.json?.ok === true);
+const listaComGrau = await http("GET", "/gestao-pessoas/modelos-360", null, tokenA2);
+verificar(
+  "modelo por cargo mostra escopo de cargo e grau 270°",
+  listaComGrau.json?.find((m) => String(m.codMod) === String(modCargo.json?.codMod))?.cargo === "Analista 360" &&
+    listaComGrau.json?.find((m) => String(m.codMod) === String(modCargo.json?.codMod))?.grau === "270°",
+);
+
+// Um novo funcionário com o mesmo cargo (sem alvo específico) herda o modelo do cargo.
+const funCargo = await http("POST", "/funcionarios", {
+  codEmp: cadA.json?.codEmp, numCad: 7370, nomeFun: "Funcionário Cargo", dtAdm: "2026-07-01", tipoContrato: "CLT", codCar: cargo360.json?.codCar,
+}, tokenA2);
+const cicloCargo = await http("POST", "/gestao-pessoas/ciclos", { nome: "Ciclo cargo", dtInicio: "2026-07-01", dtFim: "2026-12-31" }, tokenA2);
+await http("POST", `/gestao-pessoas/ciclos/${cicloCargo.json?.codCiclo}/competencias`, { nome: "Foco", peso: 1 }, tokenA2);
+await http("PATCH", `/gestao-pessoas/ciclos/${cicloCargo.json?.codCiclo}`, { status: "ABERTO" }, tokenA2);
+const avalCargo = await http("POST", `/gestao-pessoas/ciclos/${cicloCargo.json?.codCiclo}/avaliacoes`, { codFun: funCargo.json?.codFun }, tokenA2);
+const partsCargo = await http("GET", `/gestao-pessoas/avaliacoes/${avalCargo.json?.codAval}/participantes`, null, tokenA2);
+verificar(
+  "funcionário herda o modelo do CARGO ao enturmar (3 participantes)",
+  partsCargo.json?.participantes?.length === 3,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

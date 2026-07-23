@@ -20,6 +20,7 @@ const esquemaModelo = z.object({
   nome: z.string().min(2).max(160),
   codEmp: z.coerce.bigint().nullish(),
   codDep: z.coerce.bigint().nullish(),
+  codCar: z.coerce.bigint().nullish(),
   colaboradores: z.array(z.coerce.bigint()).default([]),
   avaliadores: z
     .array(
@@ -86,8 +87,9 @@ export class Avaliacao360Controller {
           nome: true,
           empresa: { select: { nomeFantasia: true } },
           departamento: { select: { descrDep: true } },
+          cargo: { select: { nomeCar: true } },
           avaliadores: { where: { ativo: 'S' }, select: { tipo: true } },
-          _count: { select: { alvos: true } },
+          _count: { select: { alvos: { where: { ativo: 'S' } } } },
         },
       });
       return modelos.map((m) => ({
@@ -95,6 +97,7 @@ export class Avaliacao360Controller {
         nome: m.nome,
         empresa: m.empresa?.nomeFantasia ?? null,
         departamento: m.departamento?.descrDep ?? null,
+        cargo: m.cargo?.nomeCar ?? null,
         qtdColaboradores: m._count.alvos,
         tipos: m.avaliadores.map((a) => a.tipo),
         grau: grauDoModelo(m.avaliadores.length),
@@ -110,7 +113,7 @@ export class Avaliacao360Controller {
         where: { codMod: BigInt(codMod), ativo: 'S' },
         include: {
           avaliadores: { where: { ativo: 'S' }, orderBy: { codModAval: 'asc' } },
-          alvos: { select: { codFun: true, funcionario: { select: { nomeFun: true } } } },
+          alvos: { where: { ativo: 'S' }, select: { codFun: true, funcionario: { select: { nomeFun: true } } } },
         },
       });
       if (!m) throw new NotFoundException('Modelo inexistente neste tenant');
@@ -119,6 +122,7 @@ export class Avaliacao360Controller {
         nome: m.nome,
         codEmp: m.codEmp,
         codDep: m.codDep,
+        codCar: m.codCar,
         avaliadores: m.avaliadores.map((a) => ({ tipo: a.tipo, peso: a.peso, obrigatorio: a.obrigatorio === 'S' })),
         colaboradores: m.alvos.map((a) => ({ codFun: a.codFun, nome: a.funcionario.nomeFun })),
       };
@@ -136,6 +140,7 @@ export class Avaliacao360Controller {
           nome: dados.nome,
           codEmp: dados.codEmp ?? null,
           codDep: dados.codDep ?? null,
+          codCar: dados.codCar ?? null,
           codUsuInc: req.usuario.codUsu,
         },
       });
@@ -153,7 +158,7 @@ export class Avaliacao360Controller {
       if (!m) throw new NotFoundException('Modelo inexistente neste tenant');
       await tx.modeloAvaliacao360.update({
         where: { codMod: m.codMod },
-        data: { nome: dados.nome, codEmp: dados.codEmp ?? null, codDep: dados.codDep ?? null },
+        data: { nome: dados.nome, codEmp: dados.codEmp ?? null, codDep: dados.codDep ?? null, codCar: dados.codCar ?? null },
       });
       await this.sincronizarModelo(tx, req.usuario.codTen, m.codMod, dados);
       return { ok: true, codMod: m.codMod };
@@ -210,7 +215,7 @@ export class Avaliacao360Controller {
    */
   static async modeloAplicavel(
     tx: Parameters<Parameters<PrismaService['executarNoTenant']>[1]>[0],
-    fun: { codFun: bigint; codEmp: bigint | null; codDep: bigint | null },
+    fun: { codFun: bigint; codEmp: bigint | null; codDep: bigint | null; codCar: bigint | null },
   ) {
     const modelos = await tx.modeloAvaliacao360.findMany({
       where: { ativo: 'S' },
@@ -219,18 +224,24 @@ export class Avaliacao360Controller {
         codMod: true,
         codEmp: true,
         codDep: true,
+        codCar: true,
         alvos: { where: { ativo: 'S' }, select: { codFun: true } },
         avaliadores: { where: { ativo: 'S' }, select: { tipo: true, peso: true } },
       },
     });
+    // Um modelo APLICA se cada dimensão de escopo informada bate; entre os que
+    // aplicam, vence o mais específico. Colaborador-alvo sempre ganha.
     const pontua = (m: (typeof modelos)[number]): number => {
-      if (m.alvos.some((a) => a.codFun === fun.codFun)) return 3; // alvo específico
-      if (m.codDep !== null && m.codDep === fun.codDep) return 2; // departamento
-      if (m.codEmp !== null && m.codEmp === fun.codEmp && m.codDep === null) return 1; // empresa
-      // "tudo nulo" só é padrão do tenant se NÃO for um modelo de alvos específicos —
-      // senão um modelo mirado em pessoas vazaria para todo mundo.
-      if (m.codEmp === null && m.codDep === null && m.alvos.length === 0) return 0;
-      return -1; // escopo não cobre este funcionário
+      if (m.alvos.some((a) => a.codFun === fun.codFun)) return 1000; // alvo específico
+      // Qualquer dimensão informada que não bate exclui o modelo.
+      if (m.codEmp !== null && m.codEmp !== fun.codEmp) return -1;
+      if (m.codDep !== null && m.codDep !== fun.codDep) return -1;
+      if (m.codCar !== null && m.codCar !== fun.codCar) return -1;
+      const temEscopo = m.codEmp !== null || m.codDep !== null || m.codCar !== null;
+      // Modelo de alvos específicos sem escopo não vale para quem não é alvo.
+      if (m.alvos.length > 0 && !temEscopo) return -1;
+      // Especificidade: cargo (4) › departamento (2) › empresa (1); tudo nulo = padrão (0).
+      return (m.codCar !== null ? 4 : 0) + (m.codDep !== null ? 2 : 0) + (m.codEmp !== null ? 1 : 0);
     };
     let escolhido: (typeof modelos)[number] | null = null;
     let melhor = -1;
@@ -241,7 +252,7 @@ export class Avaliacao360Controller {
         escolhido = m;
       }
     }
-    return escolhido && escolhido.avaliadores.length > 0 ? escolhido : null;
+    return escolhido && melhor >= 0 && escolhido.avaliadores.length > 0 ? escolhido : null;
   }
 
   // ---- Competências esperadas do cargo (role-fit) ----

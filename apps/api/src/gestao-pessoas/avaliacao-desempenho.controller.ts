@@ -352,7 +352,7 @@ export class AvaliacaoDesempenhoController {
       if (!ciclo) throw new NotFoundException('Ciclo inexistente neste tenant');
       if (ciclo.status === 'ENCERRADO') throw new BadRequestException('Ciclo encerrado não aceita novos avaliados');
 
-      const func = await tx.funcionario.findFirst({ where: { codFun: dados.codFun, ativo: 'S' }, select: { codFun: true, codEmp: true, codDep: true } });
+      const func = await tx.funcionario.findFirst({ where: { codFun: dados.codFun, ativo: 'S' }, select: { codFun: true, codEmp: true, codDep: true, codCar: true } });
       if (!func) throw new BadRequestException('Funcionário inexistente neste tenant');
 
       // Uma avaliação por funcionário por ciclo — não avaliar a mesma pessoa duas

@@ -18,6 +18,7 @@ interface ModeloResumo {
   nome: string;
   empresa: string | null;
   departamento: string | null;
+  cargo: string | null;
   qtdColaboradores: number;
   tipos: string[];
   grau: string;
@@ -27,6 +28,7 @@ function escopoTexto(m: ModeloResumo): string {
   const partes: string[] = [];
   if (m.empresa) partes.push(m.empresa);
   if (m.departamento) partes.push(m.departamento);
+  if (m.cargo) partes.push(m.cargo);
   if (m.qtdColaboradores > 0) partes.push(`${m.qtdColaboradores} colaborador(es)`);
   return partes.length ? partes.join(" · ") : "Todo o grupo (padrão)";
 }
@@ -108,10 +110,12 @@ function EditorModelo360({ codMod, fechar, aoSalvar }: { codMod: string | null; 
   const [nome, setNome] = useState("");
   const [codEmp, setCodEmp] = useState("");
   const [codDep, setCodDep] = useState("");
+  const [codCar, setCodCar] = useState("");
   const [sel, setSel] = useState<Record<string, Avaliador>>({});
   const [colabs, setColabs] = useState<string[]>([]);
   const [empresas, setEmpresas] = useState<Opcao[]>([]);
   const [deptos, setDeptos] = useState<Opcao[]>([]);
+  const [cargos, setCargos] = useState<Opcao[]>([]);
   const [funcs, setFuncs] = useState<FuncOpcao[]>([]);
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -121,20 +125,23 @@ function EditorModelo360({ codMod, fechar, aoSalvar }: { codMod: string | null; 
     void Promise.all([
       api<{ codEmp: string; nomeFantasia: string }[]>("/empresas"),
       api<{ codDep: string; descrDep: string }[]>("/departamentos"),
+      api<{ codCar: string; nomeCar: string }[]>("/cargos"),
       api<{ codFun: string; nomeFun: string; numCad: string }[]>("/funcionarios"),
-    ]).then(([e, d, f]) => {
+    ]).then(([e, d, c, f]) => {
       if (e.json) setEmpresas(e.json.map((x) => ({ cod: String(x.codEmp), rotulo: x.nomeFantasia })));
       if (d.json) setDeptos(d.json.map((x) => ({ cod: String(x.codDep), rotulo: x.descrDep })));
+      if (c.json) setCargos(c.json.map((x) => ({ cod: String(x.codCar), rotulo: x.nomeCar })));
       if (f.json) setFuncs(f.json.map((x) => ({ codFun: String(x.codFun), nomeFun: x.nomeFun, numCad: String(x.numCad) })));
     });
     if (codMod) {
-      void api<{ nome: string; codEmp: string | null; codDep: string | null; avaliadores: Avaliador[]; colaboradores: { codFun: string }[] }>(
+      void api<{ nome: string; codEmp: string | null; codDep: string | null; codCar: string | null; avaliadores: Avaliador[]; colaboradores: { codFun: string }[] }>(
         `/gestao-pessoas/modelos-360/${codMod}`,
       ).then((r) => {
         if (r.status === 200 && r.json) {
           setNome(r.json.nome);
           setCodEmp(r.json.codEmp ? String(r.json.codEmp) : "");
           setCodDep(r.json.codDep ? String(r.json.codDep) : "");
+          setCodCar(r.json.codCar ? String(r.json.codCar) : "");
           const m: Record<string, Avaliador> = {};
           for (const a of r.json.avaliadores) m[a.tipo] = a;
           setSel(m);
@@ -168,6 +175,7 @@ function EditorModelo360({ codMod, fechar, aoSalvar }: { codMod: string | null; 
       nome,
       codEmp: codEmp || null,
       codDep: codDep || null,
+      codCar: codCar || null,
       colaboradores: colabs,
       avaliadores: avaliadores.map((a) => ({ tipo: a.tipo, peso: a.peso, obrigatorio: a.obrigatorio })),
     };
@@ -213,9 +221,16 @@ function EditorModelo360({ codMod, fechar, aoSalvar }: { codMod: string | null; 
                   {deptos.map((o) => <option key={o.cod} value={o.cod}>{o.rotulo}</option>)}
                 </Selecao>
               </Campo>
+              <Campo rotulo="Cargo">
+                <Selecao value={codCar} onChange={(e) => setCodCar(e.target.value)}>
+                  <option value="">Todos</option>
+                  {cargos.map((o) => <option key={o.cod} value={o.cod}>{o.rotulo}</option>)}
+                </Selecao>
+              </Campo>
             </div>
             <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "6px 0 0" }}>
-              Deixe em branco para o escopo mais amplo. Colaboradores específicos abaixo têm a maior precedência.
+              Deixe em branco para o escopo mais amplo. Mais específico vence: colaborador › cargo › departamento ›
+              empresa › padrão. Colaboradores específicos abaixo têm a maior precedência.
             </p>
           </div>
 
