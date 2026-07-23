@@ -21,6 +21,19 @@ const esquemaModelo = z.object({
     )
     .min(1),
 });
+const esquemaCompetenciasCargo = z.object({
+  competencias: z
+    .array(
+      z.object({
+        nome: z.string().min(1).max(160),
+        nivelEsperado: z.coerce.number().int().min(1).max(5),
+        criticidade: z.enum(['ALTA', 'MEDIA', 'BAIXA']).default('MEDIA'),
+        descricao: z.string().max(2000).optional(),
+        justificativa: z.string().max(2000).optional(),
+      }),
+    )
+    .max(50),
+});
 const esquemaAtribuir = z.object({ codUsuAvaliador: z.coerce.bigint() });
 const esquemaNotaPart = z.object({
   codComp: z.coerce.bigint(),
@@ -151,6 +164,51 @@ export class Avaliacao360Controller {
         }
       }
       return { ok: true, codMod: modelo.codMod };
+    });
+  }
+
+  // ---- Competências esperadas do cargo (role-fit) ----
+
+  @Get('cargos/:codCar/competencias-esperadas')
+  @Permissoes('gestaopessoas.avaliacoes.ler')
+  async competenciasEsperadas(@Req() req: ReqAut, @Param('codCar') codCar: string) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cargo = await tx.cargo.findFirst({ where: { codCar: BigInt(codCar), ativo: 'S' }, select: { nomeCar: true } });
+      if (!cargo) throw new NotFoundException('Cargo inexistente neste tenant');
+      const competencias = await tx.competenciaCargo.findMany({
+        where: { codCar: BigInt(codCar), ativo: 'S' },
+        orderBy: [{ ordem: 'asc' }, { codCarComp: 'asc' }],
+        select: { codCarComp: true, nome: true, descricao: true, nivelEsperado: true, criticidade: true, justificativa: true },
+      });
+      return { cargo: { nomeCar: cargo.nomeCar }, competencias };
+    });
+  }
+
+  @Put('cargos/:codCar/competencias-esperadas')
+  @Permissoes('gestaopessoas.avaliacoes.criar')
+  async salvarCompetenciasEsperadas(@Req() req: ReqAut, @Param('codCar') codCar: string, @Body() corpo: unknown) {
+    const dados = validar(esquemaCompetenciasCargo, corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const cargo = await tx.cargo.findFirst({ where: { codCar: BigInt(codCar), ativo: 'S' } });
+      if (!cargo) throw new NotFoundException('Cargo inexistente neste tenant');
+      // Substitui o conjunto: inativa as atuais (sem DELETE) e recria as novas.
+      await tx.competenciaCargo.updateMany({ where: { codCar: BigInt(codCar), ativo: 'S' }, data: { ativo: 'N' } });
+      if (dados.competencias.length > 0) {
+        await tx.competenciaCargo.createMany({
+          data: dados.competencias.map((c, i) => ({
+            codTen: req.usuario.codTen,
+            codCar: BigInt(codCar),
+            nome: c.nome,
+            descricao: c.descricao,
+            nivelEsperado: c.nivelEsperado,
+            criticidade: c.criticidade,
+            justificativa: c.justificativa,
+            ordem: i,
+            codUsuInc: req.usuario.codUsu,
+          })),
+        });
+      }
+      return { ok: true, total: dados.competencias.length };
     });
   }
 

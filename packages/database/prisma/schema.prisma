@@ -78,6 +78,7 @@ model Tenant {
   modeloAvaliadores360 ModeloAvaliador360[]
   participantesAval ParticipanteAvaliacao[]
   notasParticipante NotaParticipante[]
+  competenciasCargo CompetenciaCargo[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -148,6 +149,7 @@ model Cargo {
   funcionarios Funcionario[]
   vagas        Vaga[]
   modelos360   ModeloAvaliacao360[]
+  competenciasEsperadas CompetenciaCargo[]
 
   @@unique([codTen, nomeCar])
   @@map("TFPCAR")
@@ -1200,6 +1202,36 @@ model NotaParticipante {
   @@unique([codAvalPart, codComp])
   @@index([codTen, codAvalPart])
   @@map("TGPNOTAPART")
+}
+
+/// Competência esperada de um cargo (performance-360, RN-GP-026).
+///
+/// O "perfil de competências" que o cargo pede, com o nível esperado (1..5) e a
+/// criticidade. A aderência ao cargo (role-fit) compara a nota atual da pessoa,
+/// por **nome** de competência, com este esperado — ver `situacaoAderenciaCargo`.
+/// Estar acima do esperado é neutro, não elogio automático.
+model CompetenciaCargo {
+  codCarComp    BigInt   @id @default(autoincrement()) @map("CODCARCOMP")
+  codTen        BigInt   @map("CODTEN")
+  codCar        BigInt   @map("CODCAR")
+  nome          String   @map("NOME")
+  descricao     String?  @map("DESCRICAO") @db.Text
+  /// 1 a 5 — nível esperado no cargo.
+  nivelEsperado Int      @map("NIVELESPERADO")
+  /// ALTA | MEDIA | BAIXA — o quanto essa competência importa no cargo.
+  criticidade   String   @default("MEDIA") @map("CRITICIDADE")
+  justificativa String?  @map("JUSTIFICATIVA") @db.Text
+  ordem         Int      @default(0) @map("ORDEM")
+  ativo         String   @default("S") @map("ATIVO") @db.Char(1)
+  dhInc         DateTime @default(now()) @map("DHINC")
+  codUsuInc     BigInt?  @map("CODUSUINC")
+  dhAlt         DateTime @updatedAt @map("DHALT")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+  cargo  Cargo  @relation(fields: [codCar], references: [codCar])
+
+  @@index([codTen, codCar])
+  @@map("TFPCARCOMP")
 }
 
 /// Proposta ao candidato (RN-REC-018).

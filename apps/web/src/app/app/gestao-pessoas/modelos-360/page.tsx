@@ -10,7 +10,7 @@ interface CargoModelo {
   tipos: string[];
 }
 
-export const TIPOS_360: { tipo: string; rotulo: string }[] = [
+const TIPOS_360: { tipo: string; rotulo: string }[] = [
   { tipo: "AUTO", rotulo: "Autoavaliação" },
   { tipo: "GESTOR", rotulo: "Gestor" },
   { tipo: "PAR", rotulo: "Pares" },
@@ -74,9 +74,17 @@ interface Avaliador {
   obrigatorio: boolean;
 }
 
+interface CompEsperada {
+  nome: string;
+  nivelEsperado: number;
+  criticidade: string;
+}
+
 function EditorModelo({ codCar, fechar, aoSalvar }: { codCar: string; fechar: () => void; aoSalvar: () => void }) {
   const [nomeCar, setNomeCar] = useState("");
   const [sel, setSel] = useState<Record<string, Avaliador>>({});
+  const [comps, setComps] = useState<CompEsperada[]>([]);
+  const [salvoComp, setSalvoComp] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [pronto, setPronto] = useState(false);
 
@@ -92,7 +100,26 @@ function EditorModelo({ codCar, fechar, aoSalvar }: { codCar: string; fechar: ()
       }
       setPronto(true);
     });
+    void api<{ competencias: CompEsperada[] }>(`/gestao-pessoas/cargos/${codCar}/competencias-esperadas`).then((r) => {
+      if (r.status === 200 && r.json) setComps(r.json.competencias);
+    });
   }, [codCar]);
+
+  async function salvarComps() {
+    setErro(null);
+    setSalvoComp(false);
+    const validas = comps.filter((c) => c.nome.trim());
+    const r = await api(`/gestao-pessoas/cargos/${codCar}/competencias-esperadas`, {
+      metodo: "PUT",
+      corpo: { competencias: validas.map((c) => ({ nome: c.nome, nivelEsperado: c.nivelEsperado, criticidade: c.criticidade })) },
+    });
+    if (r.status !== 200) {
+      setErro("Não foi possível salvar as competências.");
+      return;
+    }
+    setSalvoComp(true);
+    aoSalvar();
+  }
 
   function alternar(tipo: string) {
     setSel((s) => {
@@ -159,8 +186,66 @@ function EditorModelo({ codCar, fechar, aoSalvar }: { codCar: string; fechar: ()
           })}
           <Erro mensagem={erro} />
           <BotaoPrimario onClick={salvar}>Salvar modelo</BotaoPrimario>
+
+          <div style={{ borderTop: "1px solid var(--border-default)", paddingTop: 16, marginTop: 4 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Competências esperadas do cargo</div>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 10px" }}>
+              O nível esperado de cada competência. A aderência ao cargo compara com a nota atual pelo nome.
+            </p>
+            <div style={{ display: "grid", gap: 8 }}>
+              {comps.map((c, i) => (
+                <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    value={c.nome}
+                    onChange={(e) => setComps(comps.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)))}
+                    placeholder="Competência"
+                    style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border-default)", background: "var(--surface-default)", color: "var(--text-body)", fontFamily: "inherit", fontSize: 13 }}
+                  />
+                  <select
+                    value={c.nivelEsperado}
+                    onChange={(e) => setComps(comps.map((x, j) => (j === i ? { ...x, nivelEsperado: Number(e.target.value) } : x)))}
+                    title="Nível esperado"
+                    style={selectMini}
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <select
+                    value={c.criticidade}
+                    onChange={(e) => setComps(comps.map((x, j) => (j === i ? { ...x, criticidade: e.target.value } : x)))}
+                    title="Criticidade"
+                    style={selectMini}
+                  >
+                    <option value="BAIXA">Baixa</option>
+                    <option value="MEDIA">Média</option>
+                    <option value="ALTA">Alta</option>
+                  </select>
+                  <button onClick={() => setComps(comps.filter((_, j) => j !== i))} title="Remover" style={{ ...selectMini, cursor: "pointer" }}>✕</button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setComps([...comps, { nome: "", nivelEsperado: 4, criticidade: "MEDIA" }])}
+              style={{ marginTop: 8, background: "none", border: "none", color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: 0 }}
+            >
+              + Adicionar competência
+            </button>
+            <div style={{ marginTop: 12 }}>
+              <BotaoPrimario onClick={salvarComps}>Salvar competências</BotaoPrimario>
+              {salvoComp && <span style={{ fontSize: 12, color: "var(--feedback-success, #15803d)", marginLeft: 10 }}>Salvo.</span>}
+            </div>
+          </div>
         </div>
       )}
     </Gaveta>
   );
 }
+
+const selectMini: React.CSSProperties = {
+  padding: "6px 8px",
+  borderRadius: 6,
+  border: "1px solid var(--border-default)",
+  background: "var(--surface-default)",
+  color: "var(--text-body)",
+  fontFamily: "inherit",
+  fontSize: 13,
+};

@@ -7,6 +7,7 @@ import { progressoDoPlano } from './pdi';
 import { calcularAderencia } from './aderencia';
 import { classificacaoDesempenho, distribuicaoPorFaixa } from './desempenho-360';
 import { resolverAvaliacao } from './nota-avaliacao';
+import { ROTULO_SITUACAO, situacaoAderenciaCargo } from './aderencia-cargo';
 
 type ReqAut = Request & { usuario: UsuarioAutenticado };
 
@@ -425,6 +426,141 @@ export class Colaborador360Controller {
       });
 
       return { ciclo: aval.ciclo.nome, modo: resolvida.modo, tipos, competencias };
+    });
+  }
+
+  /**
+   * Aderência ao cargo (role-fit, RN-GP-026): compara, por nome de competência,
+   * a nota atual da pessoa com o nível esperado do cargo. Estar acima do
+   * esperado é neutro.
+   */
+  @Get(':codFun/aderencia-cargo')
+  @Permissoes('gestaopessoas.avaliacoes.ler')
+  async aderenciaCargo(@Req() req: ReqAut, @Param('codFun') codFunParam: string) {
+    const codFun = BigInt(codFunParam);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const func = await tx.funcionario.findFirst({
+        where: { codFun, ativo: 'S' },
+        select: { codCar: true, cargo: { select: { nomeCar: true } } },
+      });
+      if (!func) throw new BadRequestException('Colaborador inexistente neste tenant');
+      if (!func.codCar) return { cargo: null, competencias: [] };
+
+      const [esperadas, aval] = await Promise.all([
+        tx.competenciaCargo.findMany({
+          where: { codCar: func.codCar, ativo: 'S' },
+          orderBy: [{ ordem: 'asc' }, { codCarComp: 'asc' }],
+          select: { nome: true, descricao: true, nivelEsperado: true, criticidade: true },
+        }),
+        tx.avaliacaoDesempenho.findFirst({
+          where: { codFun },
+          orderBy: { codAval: 'desc' },
+          select: {
+            ciclo: { select: { competencias: { select: { codComp: true, nome: true, peso: true } } } },
+            notas: { select: { codComp: true, nota: true } },
+            participantes: { select: { peso: true, notas: { select: { codComp: true, nota: true } } } },
+          },
+        }),
+      ]);
+
+      // Nota atual por NOME de competência (case-insensitive).
+      const atualPorNome = new Map<string, number>();
+      if (aval) {
+        const resolvida = resolverAvaliacao(aval.ciclo.competencias, aval.notas, aval.participantes);
+        for (const c of aval.ciclo.competencias) {
+          const nota = resolvida.porCompetencia.get(c.codComp.toString());
+          if (nota != null) atualPorNome.set(c.nome.trim().toLowerCase(), nota);
+        }
+      }
+
+      return {
+        cargo: func.cargo?.nomeCar ?? null,
+        competencias: esperadas.map((e) => {
+          const atual = atualPorNome.get(e.nome.trim().toLowerCase()) ?? null;
+          const r = situacaoAderenciaCargo(atual, e.nivelEsperado);
+          return {
+            nome: e.nome,
+            descricao: e.descricao,
+            criticidade: e.criticidade,
+            esperado: e.nivelEsperado,
+            atual,
+            distancia: r.distancia,
+            situacao: r.situacao,
+            situacaoRotulo: ROTULO_SITUACAO[r.situacao],
+          };
+        }),
+      };
+    });
+  }
+
+  /**
+   * Detalhe de uma competência da avaliação atual (para a gaveta, Fase 5b):
+   * definição, nota consolidada, notas por avaliador (com comentário), esperado
+   * do cargo e as ações de desenvolvimento relacionadas (por nome).
+   */
+  @Get(':codFun/competencias/:codComp')
+  @Permissoes('gestaopessoas.avaliacoes.ler')
+  async detalheCompetencia(@Req() req: ReqAut, @Param('codFun') codFunParam: string, @Param('codComp') codCompParam: string) {
+    const codFun = BigInt(codFunParam);
+    const codComp = BigInt(codCompParam);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const aval = await tx.avaliacaoDesempenho.findFirst({
+        where: { codFun, ciclo: { competencias: { some: { codComp } } } },
+        orderBy: { codAval: 'desc' },
+        select: {
+          codFun: true,
+          funcionario: { select: { codCar: true } },
+          ciclo: { select: { competencias: { where: { codComp }, select: { codComp: true, nome: true, descricao: true, peso: true } } } },
+          notas: { select: { codComp: true, nota: true } },
+          participantes: { select: { tipo: true, peso: true, notas: { select: { codComp: true, nota: true, comentario: true } } } },
+        },
+      });
+      if (!aval || aval.ciclo.competencias.length === 0) throw new NotFoundException('Competência inexistente nesta avaliação');
+      const comp = aval.ciclo.competencias[0];
+
+      const resolvida = resolverAvaliacao(
+        [{ codComp: comp.codComp, peso: comp.peso }],
+        aval.notas.filter((n) => n.codComp === codComp),
+        aval.participantes.map((p) => ({ peso: p.peso, notas: p.notas.filter((n) => n.codComp === codComp) })),
+      );
+
+      const porAvaliador = aval.participantes
+        .map((p) => {
+          const n = p.notas.find((x) => x.codComp === codComp);
+          return n ? { tipo: p.tipo, nota: n.nota, comentario: n.comentario } : null;
+        })
+        .filter((x): x is { tipo: string; nota: number; comentario: string | null } => x !== null);
+
+      // Esperado do cargo por nome.
+      let esperado: { nivel: number; situacaoRotulo: string } | null = null;
+      if (aval.funcionario.codCar) {
+        const ec = await tx.competenciaCargo.findFirst({
+          where: { codCar: aval.funcionario.codCar, ativo: 'S', nome: { equals: comp.nome, mode: 'insensitive' } },
+          select: { nivelEsperado: true },
+        });
+        if (ec) {
+          const r = situacaoAderenciaCargo(resolvida.notaFinal, ec.nivelEsperado);
+          esperado = { nivel: ec.nivelEsperado, situacaoRotulo: ROTULO_SITUACAO[r.situacao] };
+        }
+      }
+
+      // Ações de desenvolvimento relacionadas por nome de competência.
+      const acoes = await tx.acaoDesenvolvimento.findMany({
+        where: { plano: { codFun }, competencia: { equals: comp.nome, mode: 'insensitive' } },
+        orderBy: { codAcao: 'desc' },
+        take: 10,
+        select: { descricao: true, tipo: true, status: true },
+      });
+
+      return {
+        nome: comp.nome,
+        descricao: comp.descricao,
+        peso: comp.peso,
+        notaConsolidada: resolvida.notaFinal,
+        porAvaliador,
+        esperado,
+        acoesRelacionadas: acoes,
+      };
     });
   }
 }

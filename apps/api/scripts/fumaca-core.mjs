@@ -2195,6 +2195,39 @@ verificar(
   (await http("GET", `/gestao-pessoas/avaliacoes/${aval360.json?.codAval}/participantes`, null, tokenB)).status === 404,
 );
 
+// 38. Aderência ao cargo / role-fit (RN-GP-026)
+// Espera "Entrega" nível 4 e "Comunicação" nível 5 no cargo do fun360.
+const putEsp = await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/competencias-esperadas`, {
+  competencias: [
+    { nome: "Entrega", nivelEsperado: 4, criticidade: "ALTA" },
+    { nome: "Liderança", nivelEsperado: 3, criticidade: "MEDIA" },
+  ],
+}, tokenA2);
+verificar("configura competências esperadas do cargo (ok)", putEsp.json?.ok === true && putEsp.json?.total === 2);
+
+const roleFit = await http("GET", `/gestao-pessoas/colaboradores/${fun360.json?.codFun}/aderencia-cargo`, null, tokenA2);
+// fun360 tem "Entrega" consolidada 4.5 (do ciclo 360). Esperado 4 → +0.5 → ACIMA.
+const entrega = roleFit.json?.competencias?.find((c) => c.nome === "Entrega");
+verificar("role-fit casa por nome: Entrega atual 4.5 vs esperado 4 → ACIMA", entrega?.atual === 4.5 && entrega?.situacao === "ACIMA");
+const lideranca = roleFit.json?.competencias?.find((c) => c.nome === "Liderança");
+verificar("competência esperada sem avaliação → SEM_DADO", lideranca?.atual === null && lideranca?.situacao === "SEM_DADO");
+
+// Substituir o conjunto é soft-remove + recria
+await http("PUT", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/competencias-esperadas`, { competencias: [{ nome: "Entrega", nivelEsperado: 5 }] }, tokenA2);
+const esp2 = await http("GET", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/competencias-esperadas`, null, tokenA2);
+verificar("substituir competências deixa só a nova (1)", esp2.json?.competencias?.length === 1 && esp2.json?.competencias[0].nivelEsperado === 5);
+
+// Detalhe da competência
+const det = await http("GET", `/gestao-pessoas/colaboradores/${fun360.json?.codFun}/competencias/${comp360.json?.codComp}`, null, tokenA2);
+verificar(
+  "detalhe da competência traz nota consolidada e notas por avaliador",
+  det.status === 200 && det.json?.notaConsolidada === 4.5 && det.json?.porAvaliador?.length === 2,
+);
+verificar(
+  "tenant B não vê competências esperadas do cargo A → 404",
+  (await http("GET", `/gestao-pessoas/cargos/${cargo360.json?.codCar}/competencias-esperadas`, null, tokenB)).status === 404,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);
