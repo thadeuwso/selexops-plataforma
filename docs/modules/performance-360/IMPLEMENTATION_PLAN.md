@@ -4,8 +4,8 @@
 > quando toca UI, conferência no navegador. Cada fase que entrega valor vira uma RN no vault.
 > Migrations sempre incrementais + bloco RLS. Nada destrutivo.
 
-Estado atual: **Fases 1–4 e 5a entregues.** 3 (estrutura base), 4 (Visão 360 + `ProximaAcao`, migration 0033), **5a** (360 configurável por cargo: `ModeloAvaliacao360`/`ModeloAvaliador360`/`ParticipanteAvaliacao`/`NotaParticipante`, consolidação ponderada via `resolverAvaliacao`, comparação entre avaliadores, config por cargo, gaveta por participante; migration 0034).
-**Próxima: Fase 5b (aderência ao cargo — `CompetenciaCargo`/role-fit — + heatmap + gaveta de detalhe da competência).**
+Estado atual: **Fases 1–5 entregues.** 4 (Visão 360 + `ProximaAcao`, mig 0033), 5a (360 por cargo: modelo/participantes/consolidação, mig 0034), **5b** (role-fit `CompetenciaCargo`/`situacaoAderenciaCargo`, heatmap, gaveta de detalhe da competência, config de esperadas por cargo; mig 0035).
+**Próxima: Fase 6 (metas e feedbacks — `Meta`/`ProgressoMeta`).**
 
 ---
 
