@@ -8,7 +8,12 @@ interface Eu {
   nome: string;
 }
 interface Funcionario {
+  codFun: string;
+  nomeFun: string;
   situacao: string;
+  dtAdm: string;
+  cargo: { nomeCar: string } | null;
+  departamento: { descrDep: string } | null;
 }
 interface Vaga {
   status: string;
@@ -80,6 +85,10 @@ export default function PaginaDashboard() {
   if (!eu) return null;
 
   const funcionariosAtivos = funcionarios.filter((f) => f.situacao === "ATIVO").length;
+  const limiteContratacao = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const novasContratacoes = funcionarios
+    .filter((f) => f.dtAdm && new Date(f.dtAdm).getTime() >= limiteContratacao)
+    .sort((a, b) => new Date(b.dtAdm).getTime() - new Date(a.dtAdm).getTime());
   const vagasAbertas = vagas.filter((v) => v.status === "ABERTA").length;
   const admissoesEmAndamento = admissoes.filter((a) => a.status !== "APROVADO").length;
   const admissoesPendentesDp = admissoes.filter((a) => a.status === "AGUARDANDO_APROVACAO_DP");
@@ -95,12 +104,58 @@ export default function PaginaDashboard() {
         </p>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 24 }}>
         <CardKpi rotulo="Funcionários ativos" valor={funcionariosAtivos} />
+        <CardKpi rotulo="Novas contratações (30 dias)" valor={novasContratacoes.length} />
         <CardKpi rotulo="Vagas abertas" valor={vagasAbertas} />
         <CardKpi rotulo="Candidatos no banco de talentos" valor={totalCandidatos} />
         <CardKpi rotulo="Processos de admissão em andamento" valor={admissoesEmAndamento} />
       </div>
+
+      {novasContratacoes.length > 0 && (
+        <div
+          style={{
+            background: "var(--surface-default)",
+            border: "1px solid var(--border-default)",
+            borderRadius: 10,
+            padding: 20,
+            marginBottom: 24,
+          }}
+        >
+          <h2 style={{ fontSize: 15, fontWeight: 600, margin: "0 0 4px" }}>Novas contratações</h2>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 12px" }}>
+            Quem entrou nos últimos 30 dias. Cada um deveria já ter um plano de desenvolvimento —
+            veja em Gestão de Pessoas.
+          </p>
+          <div style={{ display: "grid", gap: 8 }}>
+            {novasContratacoes.map((f) => (
+              <div
+                key={f.codFun}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border-default)",
+                  fontSize: 14,
+                }}
+              >
+                <span>
+                  {f.nomeFun}
+                  <span style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                    {f.cargo ? ` · ${f.cargo.nomeCar}` : ""}
+                    {f.departamento ? ` · ${f.departamento.descrDep}` : ""}
+                  </span>
+                </span>
+                <span style={{ color: "var(--text-muted)", fontSize: 13, whiteSpace: "nowrap" }}>
+                  admitido em {new Date(f.dtAdm).toLocaleDateString("pt-BR")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div
         style={{

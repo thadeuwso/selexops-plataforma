@@ -34,8 +34,13 @@ const navegacao: GrupoNav[] = [
       { rota: "/app/empresa/funcionarios", rotulo: "Funcionários" },
       { rota: "/app/empresa/organizacao", rotulo: "Departamentos e cargos" },
       { rota: "/app/empresa/projetos", rotulo: "Projetos e contratos" },
-      { rota: "/app/empresa/desempenho", rotulo: "Avaliação de desempenho" },
-      { rota: "/app/empresa/aderencia", rotulo: "Painel de aderência" },
+    ],
+  },
+  {
+    grupo: "Gestão de Pessoas",
+    itens: [
+      { rota: "/app/gestao-pessoas/desempenho", rotulo: "Avaliação de desempenho" },
+      { rota: "/app/gestao-pessoas/aderencia", rotulo: "Painel de aderência" },
     ],
   },
   {

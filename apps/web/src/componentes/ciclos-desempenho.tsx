@@ -60,7 +60,7 @@ const STATUS_AVAL: Record<string, string> = {
 
 const data = (iso: string) => new Date(iso).toLocaleDateString("pt-BR");
 
-export default function PaginaDesempenho() {
+export function CiclosDesempenho() {
   const [ciclos, setCiclos] = useState<CicloResumo[] | null>(null);
   const [aberto, setAberto] = useState<CicloDetalhe | null>(null);
 
@@ -92,15 +92,12 @@ export default function PaginaDesempenho() {
   }
 
   return (
-    <main style={{ padding: 32, maxWidth: 920 }}>
+    <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16, marginBottom: 8 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 6px" }}>Avaliação de desempenho</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0, lineHeight: 1.6, maxWidth: 640 }}>
-            Ciclos periódicos com competências e nota — o momento estruturado, ao lado do feedback contínuo do
-            dia a dia. A nota final de cada pessoa é a média ponderada das competências, nunca um número solto.
-          </p>
-        </div>
+        <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0, lineHeight: 1.6, maxWidth: 640 }}>
+          Ciclos periódicos com competências e nota — o momento estruturado, ao lado do feedback contínuo do
+          dia a dia. A nota final de cada pessoa é a média ponderada das competências, nunca um número solto.
+        </p>
         <NovoCiclo aoCriar={carregar} />
       </div>
 
@@ -133,7 +130,7 @@ export default function PaginaDesempenho() {
           })}
         </div>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -217,14 +214,14 @@ function CicloDetalheView({
   }
 
   return (
-    <main style={{ padding: 32, maxWidth: 920 }}>
+    <div>
       <button onClick={voltar} style={{ background: "none", border: "none", padding: 0, color: "var(--text-link)", cursor: "pointer", fontFamily: "inherit", fontSize: 13, marginBottom: 16 }}>
         ← Todos os ciclos
       </button>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16, marginBottom: 4 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 4px" }}>{ciclo.nome}</h1>
+          <h2 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 4px" }}>{ciclo.nome}</h2>
           <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
             {data(ciclo.dtInicio)} — {data(ciclo.dtFim)} ·{" "}
             <span style={{ color: st?.cor, fontWeight: 600 }}>{st?.texto ?? ciclo.status}</span>
@@ -242,7 +239,7 @@ function CicloDetalheView({
       {/* Competências */}
       <section style={{ marginTop: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Competências</h2>
+          <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Competências</h3>
           {!encerrado && <button onClick={() => setCompAberto(true)} style={botaoSecundario}>Adicionar competência</button>}
         </div>
         {ciclo.competencias.length === 0 ? (
@@ -267,7 +264,7 @@ function CicloDetalheView({
       {/* Avaliações */}
       <section style={{ marginTop: 28 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Avaliados</h2>
+          <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Avaliados</h3>
           {!encerrado && <button onClick={() => setFuncAberto(true)} style={botaoSecundario}>Adicionar funcionário</button>}
         </div>
         {ciclo.avaliacoes.length === 0 ? (
@@ -317,7 +314,7 @@ function CicloDetalheView({
         fechar={() => setAvalAberta(null)}
         aoMudar={recarregar}
       />
-    </main>
+    </div>
   );
 }
 

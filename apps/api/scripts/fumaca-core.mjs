@@ -2057,6 +2057,28 @@ verificar(
   (await http("POST", `/gestao-pessoas/aderencia/${funPdi.json?.codFun}/plano`, {}, tokenB)).status === 400,
 );
 
+// 34. Visão geral do desempenho (central do módulo)
+const vg = await http("GET", "/gestao-pessoas/desempenho/visao-geral", null, tokenA2);
+verificar(
+  "visão geral traz novas contratações, andamento e por-departamento",
+  vg.status === 200 &&
+    Array.isArray(vg.json?.novasContratacoes) &&
+    typeof vg.json?.avaliacao?.total === "number" &&
+    Array.isArray(vg.json?.porDepartamento),
+);
+verificar(
+  "novas contratações incluem o funcionário admitido em 2026-08-01",
+  vg.json?.novasContratacoes?.some((f) => String(f.codFun) === String(funPdi.json?.codFun)),
+);
+verificar(
+  "por-departamento soma o headcount de ativos",
+  vg.json?.porDepartamento?.reduce((s, d) => s + d.headcount, 0) >= 1,
+);
+verificar(
+  "tenant B tem sua própria visão geral, isolada",
+  (await http("GET", "/gestao-pessoas/desempenho/visao-geral", null, tokenB)).status === 200,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);

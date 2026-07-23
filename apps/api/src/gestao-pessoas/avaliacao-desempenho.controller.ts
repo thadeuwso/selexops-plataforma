@@ -69,6 +69,123 @@ type ReqAut = Request & { usuario: UsuarioAutenticado };
 export class AvaliacaoDesempenhoController {
   constructor(private readonly prisma: PrismaService) {}
 
+  // ---- Visão geral do desempenho ----
+
+  /**
+   * Painel do módulo: novas contratações, andamento das avaliações dos ciclos
+   * abertos (quem já completou) e indicadores por departamento. Tudo derivado —
+   * nota média por departamento sai das avaliações concluídas, não de um campo.
+   */
+  @Get('desempenho/visao-geral')
+  @Permissoes('gestaopessoas.avaliacoes.ler')
+  async visaoGeral(@Req() req: ReqAut) {
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const limite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const funcionarios = await tx.funcionario.findMany({
+        where: { ativo: 'S' },
+        select: {
+          codFun: true,
+          nomeFun: true,
+          dtAdm: true,
+          codDep: true,
+          departamento: { select: { descrDep: true } },
+          cargo: { select: { nomeCar: true } },
+        },
+      });
+
+      const novasContratacoes = funcionarios
+        .filter((f) => f.dtAdm >= limite)
+        .sort((a, b) => b.dtAdm.getTime() - a.dtAdm.getTime())
+        .map((f) => ({
+          codFun: f.codFun,
+          nomeFun: f.nomeFun,
+          dtAdm: f.dtAdm,
+          cargo: f.cargo?.nomeCar ?? null,
+          departamento: f.departamento?.descrDep ?? null,
+        }));
+
+      // Avaliações dos ciclos ABERTOS — o que está acontecendo agora.
+      const abertas = await tx.avaliacaoDesempenho.findMany({
+        where: { ciclo: { status: 'ABERTO' } },
+        select: {
+          codFun: true,
+          status: true,
+          dhConclusao: true,
+          funcionario: { select: { nomeFun: true } },
+          ciclo: { select: { nome: true, competencias: { select: { codComp: true, peso: true } } } },
+          notas: { select: { codComp: true, nota: true } },
+        },
+      });
+      const notaDe = (comps: { codComp: bigint; peso: number }[], notas: { codComp: bigint; nota: number }[]) => {
+        const pesos = new Map(comps.map((c) => [c.codComp.toString(), c.peso]));
+        return notaFinal(notas.map((n) => ({ nota: n.nota, peso: pesos.get(n.codComp.toString()) ?? 1 })));
+      };
+      const concluidas = abertas.filter((a) => a.status === 'CONCLUIDA');
+      const avaliacao = {
+        total: abertas.length,
+        concluidas: concluidas.length,
+        emAndamento: abertas.filter((a) => a.status === 'EM_ANDAMENTO').length,
+        pendentes: abertas.filter((a) => a.status === 'PENDENTE').length,
+        concluidasLista: concluidas.map((a) => ({
+          codFun: a.codFun,
+          nomeFun: a.funcionario.nomeFun,
+          ciclo: a.ciclo.nome,
+          dhConclusao: a.dhConclusao,
+          notaFinal: notaDe(a.ciclo.competencias, a.notas),
+        })),
+      };
+
+      // Nota média por departamento — de todas as avaliações concluídas (histórico).
+      const concluidasTodas = await tx.avaliacaoDesempenho.findMany({
+        where: { status: 'CONCLUIDA' },
+        select: {
+          codFun: true,
+          ciclo: { select: { competencias: { select: { codComp: true, peso: true } } } },
+          notas: { select: { codComp: true, nota: true } },
+        },
+      });
+      const notasPorFun = new Map<string, number[]>();
+      for (const a of concluidasTodas) {
+        const nf = notaDe(a.ciclo.competencias, a.notas);
+        if (nf !== null) {
+          const arr = notasPorFun.get(a.codFun.toString()) ?? [];
+          arr.push(nf);
+          notasPorFun.set(a.codFun.toString(), arr);
+        }
+      }
+      const grupos = new Map<string, { codDep: string | null; departamento: string; headcount: number; notas: number[] }>();
+      for (const f of funcionarios) {
+        const chave = f.codDep ? f.codDep.toString() : 'sem';
+        const g =
+          grupos.get(chave) ??
+          {
+            codDep: f.codDep ? f.codDep.toString() : null,
+            departamento: f.departamento?.descrDep ?? 'Sem departamento',
+            headcount: 0,
+            notas: [] as number[],
+          };
+        g.headcount += 1;
+        const nf = notasPorFun.get(f.codFun.toString());
+        if (nf) g.notas.push(...nf);
+        grupos.set(chave, g);
+      }
+      const porDepartamento = [...grupos.values()]
+        .map((g) => ({
+          codDep: g.codDep,
+          departamento: g.departamento,
+          headcount: g.headcount,
+          avaliados: g.notas.length,
+          notaMedia: g.notas.length
+            ? Math.round((g.notas.reduce((s, n) => s + n, 0) / g.notas.length) * 10) / 10
+            : null,
+        }))
+        .sort((a, b) => b.headcount - a.headcount);
+
+      return { novasContratacoes, avaliacao, porDepartamento };
+    });
+  }
+
   // ---- Ciclos ----
 
   @Get('ciclos')
