@@ -4,8 +4,8 @@
 > quando toca UI, conferência no navegador. Cada fase que entrega valor vira uma RN no vault.
 > Migrations sempre incrementais + bloco RLS. Nada destrutivo.
 
-Estado atual: Fases 1–2 (Descoberta + Arquitetura) entregues neste conjunto de documentos.
-**Próximo passo após sua aprovação: Fase 3.**
+Estado atual: **Fases 1–4 entregues.** 1–2 (docs), 3 (estrutura base: rota, cabeçalho, abas, agregador), 4 (Visão 360: evolução SVG, distribuição, destaques/atenção, próximos passos + `ProximaAcao`/TGPPROX, migration 0033).
+**Próxima: Fase 5 (competências e avaliadores — 360 configurável por cargo).**
 
 ---
 
