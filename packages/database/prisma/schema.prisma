@@ -69,6 +69,10 @@ model Tenant {
   planos         PlanoDesenvolvimento[]
   acoesDesenv    AcaoDesenvolvimento[]
   feedbacks      Feedback[]
+  ciclosAval     CicloAvaliacao[]
+  competenciasCiclo CompetenciaCiclo[]
+  avaliacoesDesemp  AvaliacaoDesempenho[]
+  notasCompetencia  NotaCompetencia[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -211,6 +215,7 @@ model Funcionario {
   historicos      FuncionarioHistorico[]
   planos          PlanoDesenvolvimento[]
   feedbacks       Feedback[]
+  avaliacoesDesemp AvaliacaoDesempenho[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -287,6 +292,7 @@ model Usuario {
   entrevistas Entrevista[]   @relation("EntrevistaEntrevistador")
   pdisResp    PlanoDesenvolvimento[] @relation("PdiResponsavel")
   feedbacksAutor Feedback[]          @relation("FeedbackAutor")
+  avaliacoesFeitas AvaliacaoDesempenho[] @relation("AvaliadorDesempenho")
   favoritas   CandidaturaFavorita[]
   filtrosSalvos FiltroSalvo[]
 
@@ -945,6 +951,117 @@ model Feedback {
 
   @@index([codTen, codFun])
   @@map("TGPFEED")
+}
+
+/// Ciclo de avaliação de desempenho (RN-GP-022).
+///
+/// A campanha: "Avaliação Semestral 2026/2", com período e um conjunto de
+/// competências a avaliar. Uma avaliação de desempenho sempre vive dentro de um
+/// ciclo — nota solta, sem período nem critério, não diz nada.
+///
+/// Distinto do feedback (RN-GP-021): feedback é contínuo e pontual; o ciclo é o
+/// momento estruturado, periódico, com competências e nota.
+model CicloAvaliacao {
+  codCiclo   BigInt    @id @default(autoincrement()) @map("CODCICLO")
+  codTen     BigInt    @map("CODTEN")
+  nome       String    @map("NOME")
+  descricao  String?   @map("DESCRICAO") @db.Text
+  dtInicio   DateTime  @map("DTINICIO") @db.Date
+  dtFim      DateTime  @map("DTFIM") @db.Date
+  /// RASCUNHO | ABERTO | ENCERRADO. Enquanto RASCUNHO se ajustam competências;
+  /// ABERTO os avaliadores preenchem; ENCERRADO congela.
+  status     String    @default("RASCUNHO") @map("STATUS")
+  dhInc      DateTime  @default(now()) @map("DHINC")
+  codUsuInc  BigInt?   @map("CODUSUINC")
+  dhAlt      DateTime  @updatedAt @map("DHALT")
+
+  tenant       Tenant                @relation(fields: [codTen], references: [codTen])
+  competencias CompetenciaCiclo[]
+  avaliacoes   AvaliacaoDesempenho[]
+
+  @@index([codTen, status])
+  @@map("TGPCICLO")
+}
+
+/// Competência avaliada em um ciclo (RN-GP-022).
+///
+/// O que se avalia — "Colaboração", "Entrega", "Domínio técnico" — com um peso.
+/// O peso pondera a nota final: nem toda competência importa igual, e um número
+/// único que ignora isso engana. Vive dentro do ciclo, não é catálogo global:
+/// cada campanha escolhe o que faz sentido medir naquele momento.
+model CompetenciaCiclo {
+  codComp    BigInt   @id @default(autoincrement()) @map("CODCOMP")
+  codTen     BigInt   @map("CODTEN")
+  codCiclo   BigInt   @map("CODCICLO")
+  nome       String   @map("NOME")
+  descricao  String?  @map("DESCRICAO") @db.Text
+  /// Peso relativo na média ponderada. Default 1 = todas iguais.
+  peso       Int      @default(1) @map("PESO")
+  ordem      Int      @default(0) @map("ORDEM")
+
+  tenant Tenant         @relation(fields: [codTen], references: [codTen])
+  ciclo  CicloAvaliacao @relation(fields: [codCiclo], references: [codCiclo])
+  notas  NotaCompetencia[]
+
+  @@index([codTen, codCiclo])
+  @@map("TGPCOMP")
+}
+
+/// Avaliação de desempenho de um funcionário dentro de um ciclo (RN-GP-022).
+///
+/// Uma por funcionário por ciclo (`@@unique`): a mesma pessoa não é avaliada
+/// duas vezes na mesma campanha. A `notaFinal` NÃO fica aqui como campo — é
+/// derivada das notas por competência (ver `notaFinal`), pelo mesmo motivo do
+/// progresso do PDI: um campo à parte poderia contradizer os itens.
+model AvaliacaoDesempenho {
+  codAval        BigInt    @id @default(autoincrement()) @map("CODAVAL")
+  codTen         BigInt    @map("CODTEN")
+  codCiclo       BigInt    @map("CODCICLO")
+  codFun         BigInt    @map("CODFUN")
+  /// Quem avalia — FK p/ TSIUSU, o gestor. Nulo até ser atribuído.
+  codUsuAvaliador BigInt?  @map("CODUSUAVALIADOR")
+  /// PENDENTE | EM_ANDAMENTO | CONCLUIDA
+  status         String    @default("PENDENTE") @map("STATUS")
+  comentarioGeral String?  @map("COMENTARIOGERAL") @db.Text
+  dhConclusao    DateTime? @map("DHCONCLUSAO")
+  dhInc          DateTime  @default(now()) @map("DHINC")
+  codUsuInc      BigInt?   @map("CODUSUINC")
+  dhAlt          DateTime  @updatedAt @map("DHALT")
+
+  tenant      Tenant         @relation(fields: [codTen], references: [codTen])
+  ciclo       CicloAvaliacao @relation(fields: [codCiclo], references: [codCiclo])
+  funcionario Funcionario    @relation(fields: [codFun], references: [codFun])
+  avaliador   Usuario?       @relation("AvaliadorDesempenho", fields: [codUsuAvaliador], references: [codUsu])
+  notas       NotaCompetencia[]
+
+  @@unique([codCiclo, codFun])
+  @@index([codTen, codCiclo])
+  @@map("TGPAVAL")
+}
+
+/// Nota de uma competência dentro de uma avaliação (RN-GP-022).
+///
+/// Uma por (avaliação, competência) — `@@unique`. A nota é 1..5; o comentário
+/// justifica. Concluir a avaliação exige todas as competências do ciclo com
+/// nota (ver `podeConcluir`): nota final que ignora critério combinado é fraude
+/// involuntária.
+model NotaCompetencia {
+  codNota    BigInt  @id @default(autoincrement()) @map("CODNOTA")
+  codTen     BigInt  @map("CODTEN")
+  codAval    BigInt  @map("CODAVAL")
+  codComp    BigInt  @map("CODCOMP")
+  /// 1 a 5.
+  nota       Int     @map("NOTA")
+  comentario String? @map("COMENTARIO") @db.Text
+  dhAlt      DateTime @updatedAt @map("DHALT")
+
+  tenant      Tenant              @relation(fields: [codTen], references: [codTen])
+  avaliacao   AvaliacaoDesempenho @relation(fields: [codAval], references: [codAval])
+  competencia CompetenciaCiclo    @relation(fields: [codComp], references: [codComp])
+
+  @@unique([codAval, codComp])
+  @@index([codTen, codAval])
+  @@map("TGPNOTA")
 }
 
 /// Proposta ao candidato (RN-REC-018).

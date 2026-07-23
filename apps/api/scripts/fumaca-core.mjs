@@ -1920,6 +1920,102 @@ verificar(
   (await http("GET", `/gestao-pessoas/feedbacks?codFun=${funPdi.json?.codFun}`, null, tokenB)).json?.length === 0,
 );
 
+// 32. Ciclo de avaliação de desempenho (RN-GP-022)
+const ciclo = await http("POST", "/gestao-pessoas/ciclos", {
+  nome: "Avaliação Semestral 2026/2", descricao: "Ciclo de teste",
+  dtInicio: "2026-07-01", dtFim: "2026-12-31",
+}, tokenA2);
+verificar("cria ciclo de avaliação em rascunho (201)", ciclo.status === 201 && ciclo.json?.status === "RASCUNHO");
+verificar(
+  "ciclo com fim antes do início é recusado → 400",
+  (await http("POST", "/gestao-pessoas/ciclos", { nome: "X", dtInicio: "2026-12-31", dtFim: "2026-01-01" }, tokenA2)).status === 400,
+);
+verificar(
+  "não abre ciclo sem competência → 400",
+  (await http("PATCH", `/gestao-pessoas/ciclos/${ciclo.json?.codCiclo}`, { status: "ABERTO" }, tokenA2)).status === 400,
+);
+
+const comp1 = await http("POST", `/gestao-pessoas/ciclos/${ciclo.json?.codCiclo}/competencias`, {
+  nome: "Entrega", descricao: "Cumpre o combinado", peso: 3,
+}, tokenA2);
+const comp2 = await http("POST", `/gestao-pessoas/ciclos/${ciclo.json?.codCiclo}/competencias`, {
+  nome: "Colaboração", peso: 1,
+}, tokenA2);
+verificar("adiciona competências com peso (201)", comp1.status === 201 && comp2.status === 201);
+
+const abriu = await http("PATCH", `/gestao-pessoas/ciclos/${ciclo.json?.codCiclo}`, { status: "ABERTO" }, tokenA2);
+verificar("abre o ciclo depois de ter competência", abriu.status === 200 && abriu.json?.status === "ABERTO");
+
+const enturmar = await http("POST", `/gestao-pessoas/ciclos/${ciclo.json?.codCiclo}/avaliacoes`, {
+  codFun: funPdi.json?.codFun,
+}, tokenA2);
+verificar("enturma funcionário no ciclo (201)", enturmar.status === 201 && enturmar.json?.status === "PENDENTE");
+verificar(
+  "mesmo funcionário duas vezes no ciclo é recusado → 400",
+  (await http("POST", `/gestao-pessoas/ciclos/${ciclo.json?.codCiclo}/avaliacoes`, { codFun: funPdi.json?.codFun }, tokenA2)).status === 400,
+);
+
+// nota fora da escala 1..5 é recusada
+verificar(
+  "nota fora da escala (6) é recusada → 400",
+  (await http("PATCH", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}/notas`, { codComp: comp1.json?.codComp, nota: 6 }, tokenA2)).status === 400,
+);
+// competência de outro ciclo é recusada
+verificar(
+  "não conclui avaliação com competência em branco → 400",
+  (await http("PATCH", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}`, { concluir: true }, tokenA2)).status === 400,
+);
+
+const nota1 = await http("PATCH", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}/notas`, {
+  codComp: comp1.json?.codComp, nota: 5, comentario: "Entregou tudo no prazo",
+}, tokenA2);
+verificar("lança nota de competência (200)", nota1.status === 200 && nota1.json?.ok === true);
+
+const avalParcial = await http("GET", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}`, null, tokenA2);
+verificar("primeira nota tira a avaliação de PENDENTE", avalParcial.json?.status === "EM_ANDAMENTO");
+verificar("nota final parcial usa só a competência avaliada (5.0)", avalParcial.json?.notaFinal === 5);
+verificar("avaliação parcial ainda não pode concluir", avalParcial.json?.podeConcluir === false);
+
+await http("PATCH", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}/notas`, {
+  codComp: comp2.json?.codComp, nota: 1,
+}, tokenA2);
+const avalCheia = await http("GET", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}`, null, tokenA2);
+// (5*3 + 1*1) / (3+1) = 4.0 — média ponderada, não simples (que daria 3.0)
+verificar("nota final é a média PONDERADA das competências (4.0)", avalCheia.json?.notaFinal === 4);
+verificar("com todas as competências avaliadas, pode concluir", avalCheia.json?.podeConcluir === true);
+
+const concluiu = await http("PATCH", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}`, {
+  concluir: true, comentarioGeral: "Bom semestre, atenção à colaboração.",
+}, tokenA2);
+verificar("conclui a avaliação (200)", concluiu.status === 200 && concluiu.json?.jaConcluida !== true);
+verificar(
+  "avaliação concluída não aceita nova nota → 400",
+  (await http("PATCH", `/gestao-pessoas/avaliacoes/${enturmar.json?.codAval}/notas`, { codComp: comp1.json?.codComp, nota: 2 }, tokenA2)).status === 400,
+);
+
+const listaFun = await http("GET", `/gestao-pessoas/avaliacoes?codFun=${funPdi.json?.codFun}`, null, tokenA2);
+verificar(
+  "histórico do funcionário traz a avaliação concluída com nota",
+  listaFun.json?.length === 1 && listaFun.json[0].status === "CONCLUIDA" && listaFun.json[0].notaFinal === 4,
+);
+
+const detCiclo = await http("GET", `/gestao-pessoas/ciclos/${ciclo.json?.codCiclo}`, null, tokenA2);
+verificar(
+  "detalhe do ciclo conta a avaliação concluída",
+  detCiclo.json?.avaliacoes?.length === 1 && detCiclo.json.avaliacoes[0].notaFinal === 4,
+);
+
+const listaCiclos = await http("GET", "/gestao-pessoas/ciclos", null, tokenA2);
+verificar(
+  "lista de ciclos traz contagens de competência e conclusão",
+  listaCiclos.json?.[0]?.qtdCompetencias === 2 && listaCiclos.json[0].qtdConcluidas === 1,
+);
+
+verificar(
+  "tenant B não vê os ciclos do tenant A",
+  (await http("GET", "/gestao-pessoas/ciclos", null, tokenB)).json?.length === 0,
+);
+
 // Resultado
 if (falhas.length > 0) {
   console.error(`\n${falhas.length} falha(s) na fumaça do Core.`);
