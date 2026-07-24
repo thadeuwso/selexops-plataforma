@@ -2226,6 +2226,24 @@ verificar("obrigatório já matriculado sai das sugestões", !doColab1.json?.sug
 verificar("agregador 360 reflete treinamentos concluídos", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenA2)).json?.resumo?.treinosConcluidos === 1);
 verificar("tenant B não vê treinamentos do funcionário do tenant A", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/treinamentos`, null, tokenB)).json?.itens?.length === 0);
 
+// 42. Perfil comportamental (ponte) e Potencial 9-box (RN-GP-031)
+const comp0 = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/comportamental`, null, tokenA2);
+verificar("colaborador sem candidatura de origem → sem perfil comportamental", comp0.status === 200 && comp0.json?.temPerfil === false);
+const pot0 = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, null, tokenA2);
+verificar("potencial começa vazio", pot0.json?.temPotencial === false);
+
+const setPot = await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, { desempenhoEixo: 3, potencialEixo: 3, nivelConfianca: "ALTO", evidencias: "Entregas consistentes", cargoAlvo: "Coordenador", prontidao: "UM_A_DOIS_ANOS" }, tokenA2);
+verificar("cria avaliação de potencial (201)", setPot.status === 201);
+const pot1 = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, null, tokenA2);
+verificar("9-box: desempenho alto + potencial alto → Estrela, rascunho (revisão pendente)", pot1.json?.quadrante?.chave === "ESTRELA" && pot1.json?.revisaoHumana === false);
+verificar("potencial guarda cargo-alvo e prontidão (sucessão)", pot1.json?.cargoAlvo === "Coordenador" && pot1.json?.prontidao === "UM_A_DOIS_ANOS");
+verificar("eixo fora da faixa é recusado → 400", (await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, { desempenhoEixo: 5, potencialEixo: 1 }, tokenA2)).status === 400);
+
+const rev = await http("PATCH", `/gestao-pessoas/potencial/${pot1.json?.codPot}/revisar`, {}, tokenA2);
+verificar("marcar revisão humana (ok)", rev.json?.ok === true);
+verificar("após revisão, deixa de ser rascunho", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, null, tokenA2)).json?.revisaoHumana === true);
+verificar("tenant B não vê potencial do funcionário do tenant A", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, null, tokenB)).json?.temPotencial === false);
+
 // 37. Avaliação 360 configurável por cargo (RN-GP-025)
 const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
 verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);

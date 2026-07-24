@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import type { Colaborador360 } from "@/componentes/colaborador-360/header";
 import { GraficoEvolucao } from "@/componentes/colaborador-360/grafico-evolucao";
 import { ProximosPassos } from "@/componentes/colaborador-360/proximos-passos";
+import { Potencial360 } from "@/componentes/colaborador-360/potencial-360";
 
 const NIVEL: Record<string, { texto: string; cor: string }> = {
   ADERENTE: { texto: "Aderente", cor: "var(--feedback-success, #15803d)" },
@@ -100,6 +101,9 @@ export function Visao360({ dados }: { dados: Colaborador360 }) {
           </div>
         </Cartao>
       </div>
+
+      {/* Potencial (9-box) */}
+      <Potencial360 codFun={codFun} />
 
       {/* Evolução + distribuição */}
       <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 12 }}>
