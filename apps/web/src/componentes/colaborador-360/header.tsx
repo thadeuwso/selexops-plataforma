@@ -66,12 +66,28 @@ export function Colaborador360Header({ dados }: { dados: Colaborador360 }) {
         padding: "16px 32px",
       }}
     >
-      <Link
-        href="/app/gestao-pessoas/desempenho"
-        style={{ fontSize: 12, color: "var(--text-link)", textDecoration: "none" }}
-      >
-        ← Avaliação de desempenho
-      </Link>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <Link
+          href="/app/gestao-pessoas/desempenho"
+          style={{ fontSize: 12, color: "var(--text-link)", textDecoration: "none" }}
+        >
+          ← Avaliação de desempenho
+        </Link>
+        <Link
+          href={`/app/gestao-pessoas/colaboradores/${c.codFun}/relatorio`}
+          style={{
+            fontSize: 12,
+            padding: "5px 12px",
+            borderRadius: 6,
+            border: "1px solid var(--border-default)",
+            color: "var(--text-body)",
+            textDecoration: "none",
+            background: "var(--surface-default)",
+          }}
+        >
+          Exportar relatório
+        </Link>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 10, flexWrap: "wrap" }}>
         {/* Identidade */}

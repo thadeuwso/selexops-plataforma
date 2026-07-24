@@ -9,7 +9,8 @@ Estado atual: **Fases 1–5 entregues.** 4 (Visão 360 + `ProximaAcao`, mig 0033
 Fase 7 = treinamentos/LMS (mig 0042). **Fase 8 entregue:** perfil comportamental (ponte só-leitura com o recrutamento + aviso metodológico) + potencial 9-box (`AvaliacaoPotencial`, `quadrante9box`, rascunho→revisão humana, campos de sucessão; mig 0043).
 **Fase 9 entregue:** IA de desempenho (resumo executivo + roteiro de feedback pelo gateway; purposes registrados; `IADesempenhoInsight`; cache por hash; auditada; schema tolerante + normalização; geração real verificada Ollama/OpenAI; mig 0044).
 Fase 10 = riscos e alertas (mig 0045). **Fase 11a entregue:** auditoria de leitura (VISUALIZACAO/IA no LogAuditoria com nomeTab=PAINEL360/codReg=codFun; endpoint + aba Auditoria).
-**Resta na Fase 11:** exportação (relatório do painel — sem dep de browser no api, só `pdf-parse` de leitura; opção: HTML server-rendered + print, ou lib) e papéis/escopo (gestor pelo departamento → precisa `Departamento.codFunGestor?`) + dashboard do gestor.
+**Fase 11b entregue:** exportação do painel — rota de impressão `/colaboradores/[codFun]/relatorio` (client) que monta o relatório a partir dos endpoints que já alimentam as abas (sem duplicar consulta), com seções selecionáveis e CSS `@media print` (o navegador salva em PDF, zero dep nova); `POST :codFun/exportacao` carimba EXPORTACAO no LogAuditoria com as seções; botão "Exportar relatório" no cabeçalho. Rodapé reforça: apresenta evidências para decisão humana, não decide.
+**Resta na Fase 11:** papéis/escopo (gestor pelo departamento → precisa `Departamento.codFunGestor?`) + dashboard do gestor + filtro EMPLOYEE.
 
 ---
 

@@ -22,6 +22,7 @@ const esquemaProxima = z.object({
   codUsuResp: z.coerce.bigint().optional(),
 });
 const esquemaProximaPatch = z.object({ status: z.enum(['CONCLUIDA', 'DESCARTADA']) });
+const esquemaExportacao = z.object({ secoes: z.array(z.string().max(40)).max(20).optional() });
 
 function validar<T extends z.ZodTypeAny>(esquema: T, corpo: unknown): z.infer<T> {
   try {
@@ -618,6 +619,35 @@ export class Colaborador360Controller {
         dhAlt: l.dhAlt,
         usuario: l.codUsuAlt ? nome.get(l.codUsuAlt.toString()) ?? '—' : 'sistema',
       }));
+    });
+  }
+
+  /**
+   * Registra a exportação do painel (RN-GP-034). O relatório em si é montado no
+   * cliente a partir dos endpoints que já existem — este endpoint só carimba a
+   * trilha: quem exportou o quê e quando. Exportar dados sensíveis deixa rastro,
+   * como ver e gerar IA. Só leitura de negócio; grava apenas auditoria.
+   */
+  @Post(':codFun/exportacao')
+  @Permissoes('gestaopessoas.avaliacoes.ler')
+  async registrarExportacao(@Req() req: ReqAut, @Param('codFun') codFunParam: string, @Body() corpo: unknown) {
+    const codFun = BigInt(codFunParam);
+    const dados = validar(esquemaExportacao, corpo);
+    return this.prisma.executarNoTenant(req.usuario.codTen, async (tx) => {
+      const func = await tx.funcionario.findFirst({ where: { codFun, ativo: 'S' }, select: { codFun: true } });
+      if (!func) throw new BadRequestException('Colaborador inexistente neste tenant');
+      const log = await tx.logAuditoria.create({
+        data: {
+          codTen: req.usuario.codTen,
+          nomeTab: 'PAINEL360',
+          codReg: codFun,
+          operacao: 'EXPORTACAO',
+          origem: 'desempenho.relatorio',
+          dadosNovos: dados.secoes?.length ? { secoes: dados.secoes } : undefined,
+          codUsuAlt: req.usuario.codUsu,
+        },
+      });
+      return { ok: true, dhAlt: log.dhAlt };
     });
   }
 }

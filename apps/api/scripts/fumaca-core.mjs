@@ -2282,6 +2282,14 @@ const audit = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.co
 verificar("auditoria registra a visualização do painel (com usuário e data)", audit.status === 200 && audit.json?.some((l) => l.operacao === "VISUALIZACAO" && !!l.usuario && !!l.dhAlt));
 verificar("tenant B não vê a auditoria do funcionário do tenant A", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/auditoria`, null, tokenB)).json?.length === 0 || (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/auditoria`, null, tokenB)).status === 200);
 
+// Exportar o relatório carimba EXPORTACAO na trilha (com as seções escolhidas).
+const exp = await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/exportacao`, { secoes: ["identificacao", "desempenho", "metas"] }, tokenA2);
+verificar("registrar exportação do painel (ok + data)", exp.status === 201 && exp.json?.ok === true && !!exp.json?.dhAlt);
+const auditExp = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/auditoria`, null, tokenA2);
+verificar("auditoria registra a exportação com seções", auditExp.json?.some((l) => l.operacao === "EXPORTACAO" && l.detalhe?.secoes?.includes("desempenho")));
+verificar("exportar funcionário inexistente → 400", (await http("POST", "/gestao-pessoas/colaboradores/99999999/exportacao", { secoes: [] }, tokenA2)).status === 400);
+verificar("tenant B não exporta funcionário do tenant A → 400", (await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/exportacao`, { secoes: [] }, tokenB)).status === 400);
+
 // 37. Avaliação 360 configurável por cargo (RN-GP-025)
 const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
 verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);
