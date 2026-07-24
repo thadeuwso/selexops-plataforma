@@ -27,6 +27,8 @@ PURPOSES_REGISTRADOS = {
     "plataforma.diagnostico@v1",
     "recrutamento.estruturar-vaga@v1",
     "recrutamento.analise-candidato@v1",
+    "desempenho.resumo-executivo@v1",
+    "desempenho.roteiro-feedback@v1",
 }
 
 _PADROES_PII = [

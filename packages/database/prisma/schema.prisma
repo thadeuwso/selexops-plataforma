@@ -85,6 +85,7 @@ model Tenant {
   treinamentos      Treinamento[]
   matriculas        MatriculaTreinamento[]
   avaliacoesPotencial AvaliacaoPotencial[]
+  iaInsights        IADesempenhoInsight[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -236,6 +237,7 @@ model Funcionario {
   metas           Meta[]
   matriculas      MatriculaTreinamento[]
   avaliacoesPotencial AvaliacaoPotencial[]
+  iaInsights      IADesempenhoInsight[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -1291,6 +1293,34 @@ model AvaliacaoPotencial {
 
   @@index([codTen, codFun])
   @@map("TGPPOT")
+}
+
+/// Insight de IA sobre o desempenho do colaborador (performance-360, RN-GP-032).
+///
+/// Molde do `IAAnaliseCandidatura` do recrutamento: guarda a saída (JSON), o
+/// `hashEntrada` do dossiê (dossiê mudou → guardada envelhece, não reprocessa
+/// sozinho — chamada é paga) e a telemetria do gateway. A IA explica, não decide.
+model IADesempenhoInsight {
+  codIaIns     BigInt   @id @default(autoincrement()) @map("CODIAINS")
+  codTen       BigInt   @map("CODTEN")
+  codFun       BigInt   @map("CODFUN")
+  /// RESUMO_EXEC | ROTEIRO_FEEDBACK
+  tipo         String   @map("TIPO")
+  conteudoJson Json     @map("CONTEUDOJSON")
+  hashEntrada  String   @map("HASHENTRADA")
+  provedor     String?  @map("PROVEDOR")
+  modeloUsado  String?  @map("MODELOUSADO")
+  versaoPrompt String?  @map("VERSAOPROMPT")
+  duracaoMs    Int?     @map("DURACAOMS")
+  status       String   @default("OK") @map("STATUS")
+  dhInc        DateTime @default(now()) @map("DHINC")
+  codUsuInc    BigInt?  @map("CODUSUINC")
+
+  tenant      Tenant      @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario @relation(fields: [codFun], references: [codFun])
+
+  @@index([codTen, codFun, tipo])
+  @@map("TGPIAINS")
 }
 
 /// Modelo de avaliação 360 com escopo (performance-360, RN-GP-025 / RN-GP-027).

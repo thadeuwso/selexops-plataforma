@@ -2244,6 +2244,22 @@ verificar("marcar revisão humana (ok)", rev.json?.ok === true);
 verificar("após revisão, deixa de ser rascunho", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, null, tokenA2)).json?.revisaoHumana === true);
 verificar("tenant B não vê potencial do funcionário do tenant A", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/potencial`, null, tokenB)).json?.temPotencial === false);
 
+// 43. IA de desempenho (RN-GP-032): resumo executivo pelo gateway (ADR-0003)
+verificar("resumo de IA começa vazio", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, null, tokenA2)).json === null);
+const gerIA = await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, {}, tokenA2);
+// IA de verdade (OpenAI): 201 com resumo estruturado, ou 503 se os motores estiverem fora.
+const iaOk = gerIA.status === 201 && !!gerIA.json?.conteudoJson?.resumo && Array.isArray(gerIA.json?.conteudoJson?.validacaoHumana);
+verificar("gera resumo executivo (IA explica, não decide) OU degrada com 503", iaOk || gerIA.status === 503);
+if (iaOk) {
+  verificar("resumo guardado tem provedor e hash (telemetria do gateway)", !!gerIA.json?.provedor && !!gerIA.json?.hashEntrada);
+  const reIA = await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, {}, tokenA2);
+  verificar("regenerar com o mesmo dossiê reaproveita (cache por hash)", reIA.json?.reaproveitado === true);
+  verificar("consultar traz o resumo guardado", !!(await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, null, tokenA2)).json?.conteudoJson?.resumo);
+} else {
+  console.log("   (IA indisponível no ambiente — cenários de conteúdo pulados)");
+}
+verificar("tenant B não gera resumo de IA p/ colaborador do tenant A", [400, 403, 404].includes((await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, {}, tokenB)).status) || (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/ia/resumo`, null, tokenB)).json === null);
+
 // 37. Avaliação 360 configurável por cargo (RN-GP-025)
 const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
 verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);

@@ -5,6 +5,7 @@ import type { Colaborador360 } from "@/componentes/colaborador-360/header";
 import { GraficoEvolucao } from "@/componentes/colaborador-360/grafico-evolucao";
 import { ProximosPassos } from "@/componentes/colaborador-360/proximos-passos";
 import { Potencial360 } from "@/componentes/colaborador-360/potencial-360";
+import { ResumoIA } from "@/componentes/colaborador-360/resumo-ia";
 
 const NIVEL: Record<string, { texto: string; cor: string }> = {
   ADERENTE: { texto: "Aderente", cor: "var(--feedback-success, #15803d)" },
@@ -43,6 +44,9 @@ export function Visao360({ dados }: { dados: Colaborador360 }) {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {/* Resumo inteligente por IA */}
+      <ResumoIA codFun={codFun} />
+
       {/* Resumo executivo */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <Cartao titulo="Nota geral">
