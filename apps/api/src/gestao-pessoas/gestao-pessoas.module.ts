@@ -11,6 +11,7 @@ import { AderenciaController } from './aderencia.controller';
 import { Colaborador360Controller } from './colaborador-360.controller';
 import { Avaliacao360Controller } from './avaliacao-360.controller';
 import { MetasController } from './metas.controller';
+import { TreinamentosController } from './treinamentos.controller';
 
 @Module({
   controllers: [
@@ -26,6 +27,7 @@ import { MetasController } from './metas.controller';
     Colaborador360Controller,
     Avaliacao360Controller,
     MetasController,
+    TreinamentosController,
   ],
 })
 export class GestaoPessoasModule {}

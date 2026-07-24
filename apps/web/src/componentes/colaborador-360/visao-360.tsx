@@ -91,6 +91,12 @@ export function Visao360({ dados }: { dados: Colaborador360 }) {
                 <span style={{ color: "var(--amber-700, #714E08)" }}> · {dados.resumo.feedbacksSemCiencia} sem ciência</span>
               )}
             </div>
+            <div>
+              Treinos: {dados.resumo.treinosConcluidos} concluído(s) · {dados.resumo.treinosPendentes} em curso
+              {dados.resumo.treinosVencidos > 0 && (
+                <span style={{ color: "var(--feedback-danger, #b91c1c)" }}> · {dados.resumo.treinosVencidos} vencido(s)</span>
+              )}
+            </div>
           </div>
         </Cartao>
       </div>

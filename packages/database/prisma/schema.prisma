@@ -82,6 +82,8 @@ model Tenant {
   modeloAlvos360    ModeloAlvo360[]
   metas             Meta[]
   progressoMetas    ProgressoMeta[]
+  treinamentos      Treinamento[]
+  matriculas        MatriculaTreinamento[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -231,6 +233,7 @@ model Funcionario {
   proximasAcoes   ProximaAcao[]
   alvos360        ModeloAlvo360[]
   metas           Meta[]
+  matriculas      MatriculaTreinamento[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -900,6 +903,7 @@ model PlanoDesenvolvimento {
   acoes       AcaoDesenvolvimento[]
   feedbacks   Feedback[]
   metas       Meta[]
+  matriculas  MatriculaTreinamento[]
 
   @@index([codTen, codFun])
   @@map("TGPPDI")
@@ -1182,6 +1186,72 @@ model ProgressoMeta {
 
   @@index([codTen, codMeta])
   @@map("TGPMETAPROG")
+}
+
+/// Treinamento do catálogo (performance-360, RN-GP-030).
+///
+/// A oferta de capacitação da empresa. `competencia` (por nome) liga o
+/// treinamento à competência que desenvolve — a base das recomendações. Uma
+/// certificação com `validadeMeses` vence depois de concluída (status derivado).
+model Treinamento {
+  codTreino    BigInt   @id @default(autoincrement()) @map("CODTREINO")
+  codTen       BigInt   @map("CODTEN")
+  nome         String   @map("NOME")
+  descricao    String?  @map("DESCRICAO") @db.Text
+  /// CURSO | PALESTRA | CERTIFICACAO | LEITURA | MENTORIA | WORKSHOP | OUTRO
+  tipo         String   @default("CURSO") @map("TIPO")
+  /// Competência que o treinamento desenvolve (por nome) — casa recomendações.
+  competencia  String?  @map("COMPETENCIA")
+  cargaHoraria Int?     @map("CARGAHORARIA")
+  /// "S" = obrigatório (entra como recomendação a quem não tem).
+  obrigatorio  String   @default("N") @map("OBRIGATORIO") @db.Char(1)
+  /// Meses de validade (certificações). Nulo = não vence.
+  validadeMeses Int?    @map("VALIDADEMESES")
+  ativo        String   @default("S") @map("ATIVO") @db.Char(1)
+  dhInc        DateTime @default(now()) @map("DHINC")
+  codUsuInc    BigInt?  @map("CODUSUINC")
+  dhAlt        DateTime @updatedAt @map("DHALT")
+
+  tenant     Tenant                @relation(fields: [codTen], references: [codTen])
+  matriculas MatriculaTreinamento[]
+
+  @@index([codTen, ativo])
+  @@map("TGPTREINO")
+}
+
+/// Matrícula de um colaborador num treinamento (RN-GP-030).
+///
+/// Uma linha cobre o ciclo inteiro: RECOMENDADO (sugerido, ninguém foi
+/// matriculado ainda — a IA para aqui, sem autorização não avança) → PENDENTE →
+/// EM_ANDAMENTO → CONCLUIDO (→ VENCIDO, derivado). `origem` diz de onde veio.
+model MatriculaTreinamento {
+  codMat        BigInt    @id @default(autoincrement()) @map("CODMAT")
+  codTen        BigInt    @map("CODTEN")
+  codFun        BigInt    @map("CODFUN")
+  codTreino     BigInt    @map("CODTREINO")
+  /// RECOMENDADO | PENDENTE | EM_ANDAMENTO | CONCLUIDO | CANCELADO (VENCIDO é derivado)
+  status        String    @default("PENDENTE") @map("STATUS")
+  /// OBRIGATORIO | GESTOR | RH | IA | INTERESSE
+  origem        String    @default("GESTOR") @map("ORIGEM")
+  progresso     Int       @default(0) @map("PROGRESSO")
+  justificativa String?   @map("JUSTIFICATIVA") @db.Text
+  dtInicio      DateTime? @map("DTINICIO") @db.Date
+  dtConclusao   DateTime? @map("DTCONCLUSAO") @db.Date
+  dtVencimento  DateTime? @map("DTVENCIMENTO") @db.Date
+  certificado   String?   @map("CERTIFICADO")
+  /// Relação opcional com o PDI.
+  codPdi        BigInt?   @map("CODPDI")
+  dhInc         DateTime  @default(now()) @map("DHINC")
+  codUsuInc     BigInt?   @map("CODUSUINC")
+  dhAlt         DateTime  @updatedAt @map("DHALT")
+
+  tenant      Tenant                @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario           @relation(fields: [codFun], references: [codFun])
+  treinamento Treinamento           @relation(fields: [codTreino], references: [codTreino])
+  plano       PlanoDesenvolvimento? @relation(fields: [codPdi], references: [codPdi])
+
+  @@index([codTen, codFun])
+  @@map("TGPTREINOMAT")
 }
 
 /// Modelo de avaliação 360 com escopo (performance-360, RN-GP-025 / RN-GP-027).

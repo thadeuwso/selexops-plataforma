@@ -2198,6 +2198,34 @@ verificar("meta cancelada não recebe progresso → 400", (await http("POST", `/
 verificar("agregador 360 reflete metas (1 concluída de 2)", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenA2)).json?.resumo?.metasConcluidas === 1);
 verificar("tenant B não vê metas do funcionário do tenant A", (await http("GET", `/gestao-pessoas/metas?codFun=${funPdi.json?.codFun}`, null, tokenB)).json?.itens?.length === 0);
 
+// 41. Treinamentos (RN-GP-030): catálogo, matrícula, status VENCIDO derivado, IA não matricula
+const tCurso = await http("POST", "/gestao-pessoas/treinamentos", { nome: "Comunicação Assertiva", tipo: "CURSO", competencia: "Comunicação", cargaHoraria: 8 }, tokenA2);
+verificar("cria treinamento no catálogo (201)", tCurso.status === 201);
+const tObrig = await http("POST", "/gestao-pessoas/treinamentos", { nome: "Segurança do Trabalho", tipo: "CERTIFICACAO", obrigatorio: true, validadeMeses: 12 }, tokenA2);
+verificar("cria certificação obrigatória com validade", tObrig.status === 201);
+
+const doColab0 = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/treinamentos`, null, tokenA2);
+verificar("obrigatório não feito aparece como sugestão", doColab0.json?.sugestoes?.some((s) => String(s.codTreino) === String(tObrig.json?.codTreino)));
+
+// IA recomenda → fica RECOMENDADO (não matricula)
+const matIA = await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/treinamentos`, { codTreino: tCurso.json?.codTreino, origem: "IA" }, tokenA2);
+verificar("IA recomenda mas não matricula (status RECOMENDADO)", matIA.status === 201 && matIA.json?.status === "RECOMENDADO");
+
+// Matricula obrigatório (gestor) e conclui → certificação ganha vencimento
+const matObrig = await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/treinamentos`, { codTreino: tObrig.json?.codTreino, origem: "OBRIGATORIO" }, tokenA2);
+verificar("matricular por gestor entra PENDENTE", matObrig.json?.status === "PENDENTE");
+const conclTreino = await http("PATCH", `/gestao-pessoas/matriculas/${matObrig.json?.codMat}`, { status: "CONCLUIDO" }, tokenA2);
+verificar("concluir gera progresso 100 e vencimento (certificação)", conclTreino.json?.ok === true);
+
+const doColab1 = await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/treinamentos`, null, tokenA2);
+const concluido = doColab1.json?.itens?.find((m) => String(m.codMat) === String(matObrig.json?.codMat));
+verificar("certificação concluída tem dtVencimento em ~12 meses", concluido?.status === "CONCLUIDO" && !!concluido?.dtVencimento);
+verificar("resumo conta concluído e carga horária", doColab1.json?.resumo?.concluidos === 1);
+verificar("obrigatório já matriculado sai das sugestões", !doColab1.json?.sugestoes?.some((s) => String(s.codTreino) === String(tObrig.json?.codTreino)));
+
+verificar("agregador 360 reflete treinamentos concluídos", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenA2)).json?.resumo?.treinosConcluidos === 1);
+verificar("tenant B não vê treinamentos do funcionário do tenant A", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/treinamentos`, null, tokenB)).json?.itens?.length === 0);
+
 // 37. Avaliação 360 configurável por cargo (RN-GP-025)
 const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
 verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);

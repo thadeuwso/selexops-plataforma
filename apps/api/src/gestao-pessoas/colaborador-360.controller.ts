@@ -6,6 +6,7 @@ import { PrismaService } from '../compartilhado/prisma/prisma.service';
 import { progressoDoPlano } from './pdi';
 import { calcularAderencia } from './aderencia';
 import { resumoMetas } from './metas';
+import { resumoTreinamentos } from './treinamentos';
 import { classificacaoDesempenho, distribuicaoPorFaixa } from './desempenho-360';
 import { resolverAvaliacao } from './nota-avaliacao';
 import { ROTULO_SITUACAO, situacaoAderenciaCargo } from './aderencia-cargo';
@@ -94,7 +95,7 @@ export class Colaborador360Controller {
       });
 
       // Ciclo anterior concluído (para a tendência) — o segundo mais recente.
-      const [planos, feedbacks, metas, avaliacoesConcluidas] = await Promise.all([
+      const [planos, feedbacks, metas, treinos, avaliacoesConcluidas] = await Promise.all([
         tx.planoDesenvolvimento.findMany({
           where: { codFun, status: 'ATIVO' },
           select: { acoes: { select: { status: true, progresso: true, prazo: true } } },
@@ -104,6 +105,7 @@ export class Colaborador360Controller {
           select: { tipo: true, cienteFun: true },
         }),
         tx.meta.findMany({ where: { codFun }, select: { progresso: true, prazo: true, cancelada: true, peso: true } }),
+        tx.matriculaTreinamento.findMany({ where: { codFun }, select: { status: true, dtVencimento: true, treinamento: { select: { cargaHoraria: true } } } }),
         tx.avaliacaoDesempenho.findMany({
           where: { codFun, status: 'CONCLUIDA' },
           orderBy: { codAval: 'desc' },
@@ -161,6 +163,10 @@ export class Colaborador360Controller {
         metas.map((m) => ({ progresso: m.progresso, prazo: m.prazo, cancelada: m.cancelada === 'S', peso: m.peso })),
         hoje,
       );
+      const treinosResumo = resumoTreinamentos(
+        treinos.map((t) => ({ status: t.status, dtVencimento: t.dtVencimento, cargaHoraria: t.treinamento.cargaHoraria })),
+        hoje,
+      );
 
       return {
         colaborador: {
@@ -202,6 +208,9 @@ export class Colaborador360Controller {
           metasConcluidas: metasResumo.concluidas,
           metasEmRisco: metasResumo.emRisco + metasResumo.atrasadas,
           metasProgresso: metasResumo.progressoPonderado,
+          treinosPendentes: treinosResumo.pendentes + treinosResumo.emAndamento,
+          treinosVencidos: treinosResumo.vencidos,
+          treinosConcluidos: treinosResumo.concluidos,
         },
         aderencia,
       };
