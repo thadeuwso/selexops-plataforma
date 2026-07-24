@@ -2169,6 +2169,35 @@ verificar(
   (await http("POST", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/proximos-passos`, { acao: "x intruso" }, tokenB)).status === 400,
 );
 
+// 40. Metas (RN-GP-029): criar, progresso, status derivado, resumo ponderado, ações
+const meta1 = await http("POST", "/gestao-pessoas/metas", { codFun: funPdi.json?.codFun, titulo: "Reduzir retrabalho", peso: 3, prazo: "2026-12-31" }, tokenA2);
+verificar("cria meta (201, progresso 0)", meta1.status === 201 && meta1.json?.progresso === 0);
+verificar("meta sem funcionário válido → 400", (await http("POST", "/gestao-pessoas/metas", { codFun: 999999, titulo: "x" }, tokenA2)).status === 400);
+const meta2 = await http("POST", "/gestao-pessoas/metas", { codFun: funPdi.json?.codFun, titulo: "Certificação", peso: 1 }, tokenA2);
+
+const prog = await http("POST", `/gestao-pessoas/metas/${meta1.json?.codMeta}/progresso`, { progresso: 40, comentario: "primeira leva" }, tokenA2);
+verificar("registra progresso da meta (ok)", prog.json?.ok === true);
+
+const lista1 = await http("GET", `/gestao-pessoas/metas?codFun=${funPdi.json?.codFun}`, null, tokenA2);
+const m1 = lista1.json?.itens?.find((m) => String(m.codMeta) === String(meta1.json?.codMeta));
+verificar("meta com progresso 40 e prazo futuro → ANDAMENTO", m1?.progresso === 40 && m1?.status === "ANDAMENTO");
+verificar("resumo pondera pelo peso (meta 40 peso3 + meta 0 peso1 = 30)", lista1.json?.resumo?.progressoPonderado === 30);
+
+const detMeta = await http("GET", `/gestao-pessoas/metas/${meta1.json?.codMeta}`, null, tokenA2);
+verificar("detalhe da meta traz a trilha de progresso", detMeta.json?.progressos?.length === 1 && detMeta.json?.progressos[0].progresso === 40);
+
+const concl = await http("PATCH", `/gestao-pessoas/metas/${meta1.json?.codMeta}/acao`, { acao: "CONCLUIR" }, tokenA2);
+verificar("concluir leva a 100 e status CONCLUIDA", concl.json?.ok === true);
+const lista2 = await http("GET", `/gestao-pessoas/metas?codFun=${funPdi.json?.codFun}`, null, tokenA2);
+verificar("meta concluída conta no resumo", lista2.json?.resumo?.concluidas === 1 && lista2.json?.itens?.find((m) => String(m.codMeta) === String(meta1.json?.codMeta))?.status === "CONCLUIDA");
+
+await http("PATCH", `/gestao-pessoas/metas/${meta2.json?.codMeta}/acao`, { acao: "CANCELAR" }, tokenA2);
+verificar("cancelar marca CANCELADA e sai do progresso ponderado", (await http("GET", `/gestao-pessoas/metas?codFun=${funPdi.json?.codFun}`, null, tokenA2)).json?.resumo?.canceladas === 1);
+verificar("meta cancelada não recebe progresso → 400", (await http("POST", `/gestao-pessoas/metas/${meta2.json?.codMeta}/progresso`, { progresso: 50 }, tokenA2)).status === 400);
+
+verificar("agregador 360 reflete metas (1 concluída de 2)", (await http("GET", `/gestao-pessoas/colaboradores/${funPdi.json?.codFun}/360`, null, tokenA2)).json?.resumo?.metasConcluidas === 1);
+verificar("tenant B não vê metas do funcionário do tenant A", (await http("GET", `/gestao-pessoas/metas?codFun=${funPdi.json?.codFun}`, null, tokenB)).json?.itens?.length === 0);
+
 // 37. Avaliação 360 configurável por cargo (RN-GP-025)
 const cargo360 = await http("POST", "/cargos", { nomeCar: "Analista 360" }, tokenA2);
 verificar("cria cargo p/ modelo 360 (201)", cargo360.status === 201);

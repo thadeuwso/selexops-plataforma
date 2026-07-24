@@ -7,6 +7,7 @@ import { PdiFuncionario } from "@/componentes/pdi-funcionario";
 import { FeedbackFuncionario } from "@/componentes/feedback-funcionario";
 import { AvaliacoesFuncionario } from "@/componentes/avaliacoes-funcionario";
 import { Competencias360 } from "@/componentes/colaborador-360/competencias-360";
+import { Metas360 } from "@/componentes/colaborador-360/metas-360";
 
 const ABAS = [
   { id: "visao", rotulo: "Visão 360" },
@@ -23,7 +24,6 @@ const ABAS = [
 
 // Abas ainda não implementadas nesta fase — placeholder honesto por fase.
 const EM_BREVE: Record<string, string> = {
-  metas: "Metas do colaborador, progresso e indicadores (Fase 6).",
   treinamentos: "Treinamentos concluídos, pendentes e recomendados (Fase 7).",
   comportamental: "Perfil comportamental integrado, com aviso metodológico (Fase 8).",
   historico: "Timeline unificada da vida do colaborador na empresa (Fase 11).",
@@ -102,6 +102,7 @@ export default function PaginaColaborador360({ params }: { params: Promise<{ cod
         {aba === "visao" && <Visao360 dados={dados} />}
         {aba === "desempenho" && <AvaliacoesFuncionario codFun={codFun} />}
         {aba === "competencias" && <Competencias360 codFun={codFun} />}
+        {aba === "metas" && <Metas360 codFun={codFun} />}
         {aba === "feedbacks" && <FeedbackFuncionario codFun={codFun} />}
         {aba === "pdi" && <PdiFuncionario codFun={codFun} />}
         {EM_BREVE[aba] && (

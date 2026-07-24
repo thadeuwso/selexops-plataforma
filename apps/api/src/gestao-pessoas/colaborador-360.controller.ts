@@ -5,6 +5,7 @@ import { Permissoes, UsuarioAutenticado } from '../core/auth/autenticacao.guard'
 import { PrismaService } from '../compartilhado/prisma/prisma.service';
 import { progressoDoPlano } from './pdi';
 import { calcularAderencia } from './aderencia';
+import { resumoMetas } from './metas';
 import { classificacaoDesempenho, distribuicaoPorFaixa } from './desempenho-360';
 import { resolverAvaliacao } from './nota-avaliacao';
 import { ROTULO_SITUACAO, situacaoAderenciaCargo } from './aderencia-cargo';
@@ -93,7 +94,7 @@ export class Colaborador360Controller {
       });
 
       // Ciclo anterior concluído (para a tendência) — o segundo mais recente.
-      const [planos, feedbacks, avaliacoesConcluidas] = await Promise.all([
+      const [planos, feedbacks, metas, avaliacoesConcluidas] = await Promise.all([
         tx.planoDesenvolvimento.findMany({
           where: { codFun, status: 'ATIVO' },
           select: { acoes: { select: { status: true, progresso: true, prazo: true } } },
@@ -102,6 +103,7 @@ export class Colaborador360Controller {
           where: { codFun },
           select: { tipo: true, cienteFun: true },
         }),
+        tx.meta.findMany({ where: { codFun }, select: { progresso: true, prazo: true, cancelada: true, peso: true } }),
         tx.avaliacaoDesempenho.findMany({
           where: { codFun, status: 'CONCLUIDA' },
           orderBy: { codAval: 'desc' },
@@ -155,6 +157,10 @@ export class Colaborador360Controller {
         (s, p) => s + p.acoes.filter((a) => a.status !== 'CONCLUIDA' && a.status !== 'CANCELADA').length,
         0,
       );
+      const metasResumo = resumoMetas(
+        metas.map((m) => ({ progresso: m.progresso, prazo: m.prazo, cancelada: m.cancelada === 'S', peso: m.peso })),
+        hoje,
+      );
 
       return {
         colaborador: {
@@ -192,6 +198,10 @@ export class Colaborador360Controller {
           acoesPendentes,
           feedbacks: feedbacks.length,
           feedbacksSemCiencia,
+          metasTotal: metasResumo.total,
+          metasConcluidas: metasResumo.concluidas,
+          metasEmRisco: metasResumo.emRisco + metasResumo.atrasadas,
+          metasProgresso: metasResumo.progressoPonderado,
         },
         aderencia,
       };

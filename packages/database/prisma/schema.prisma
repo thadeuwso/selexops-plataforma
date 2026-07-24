@@ -80,6 +80,8 @@ model Tenant {
   notasParticipante NotaParticipante[]
   competenciasCargo CompetenciaCargo[]
   modeloAlvos360    ModeloAlvo360[]
+  metas             Meta[]
+  progressoMetas    ProgressoMeta[]
   respostasCulturais RespostaCultural[]
   documentosModelo DocumentoModelo[]
   assinaturas    Assinatura[]
@@ -228,6 +230,7 @@ model Funcionario {
   avaliacoesDesemp AvaliacaoDesempenho[]
   proximasAcoes   ProximaAcao[]
   alvos360        ModeloAlvo360[]
+  metas           Meta[]
   dependentes     Dependente[]
   candidaturasOrigem Candidatura[]
   assinaturas        Assinatura[]
@@ -307,6 +310,7 @@ model Usuario {
   avaliacoesFeitas AvaliacaoDesempenho[] @relation("AvaliadorDesempenho")
   participacoesAval ParticipanteAvaliacao[] @relation("ParticipanteAvaliador")
   proximasAcoesResp ProximaAcao[]       @relation("ProximaAcaoResp")
+  metasResp        Meta[]              @relation("MetaResp")
   favoritas   CandidaturaFavorita[]
   filtrosSalvos FiltroSalvo[]
 
@@ -895,6 +899,7 @@ model PlanoDesenvolvimento {
   responsavel Usuario?     @relation("PdiResponsavel", fields: [codUsuResp], references: [codUsu])
   acoes       AcaoDesenvolvimento[]
   feedbacks   Feedback[]
+  metas       Meta[]
 
   @@index([codTen, codFun])
   @@map("TGPPDI")
@@ -993,6 +998,7 @@ model CicloAvaliacao {
   tenant       Tenant                @relation(fields: [codTen], references: [codTen])
   competencias CompetenciaCiclo[]
   avaliacoes   AvaliacaoDesempenho[]
+  metas        Meta[]
 
   @@index([codTen, status])
   @@map("TGPCICLO")
@@ -1113,6 +1119,69 @@ model ProximaAcao {
 
   @@index([codTen, codFun, status])
   @@map("TGPPROX")
+}
+
+/// Meta do colaborador (performance-360, RN-GP-029).
+///
+/// O que se combinou entregar, com peso e prazo. O **status é derivado** de
+/// progresso + prazo + cancelamento (ver `statusDaMeta`), nunca um campo à parte.
+/// Pode se ligar a um ciclo, a uma competência ou a um plano — sem exigir isso.
+/// Nesta leva, a meta é acompanhada AO LADO da nota (não a altera); `impactoAvaliacao`
+/// é informativo.
+model Meta {
+  codMeta          BigInt    @id @default(autoincrement()) @map("CODMETA")
+  codTen           BigInt    @map("CODTEN")
+  codFun           BigInt    @map("CODFUN")
+  /// Opcional: meta atrelada a um ciclo de avaliação.
+  codCiclo         BigInt?   @map("CODCICLO")
+  titulo           String    @map("TITULO")
+  descricao        String?   @map("DESCRICAO") @db.Text
+  peso             Int       @default(1) @map("PESO")
+  prazo            DateTime? @map("PRAZO") @db.Date
+  /// 0 a 100 — progresso atual (a última atualização registrada).
+  progresso        Int       @default(0) @map("PROGRESSO")
+  /// "S" quando cancelada. Cancelar é marca própria; concluir é progresso 100.
+  cancelada        String    @default("N") @map("CANCELADA") @db.Char(1)
+  /// Texto informativo sobre como a meta pesa na avaliação (não altera a nota).
+  impactoAvaliacao String?   @map("IMPACTOAVALIACAO")
+  resultado        String?   @map("RESULTADO") @db.Text
+  /// Responsável — FK p/ TSIUSU.
+  codUsuResp       BigInt?   @map("CODUSURESP")
+  /// Relação opcional com o PDI.
+  codPdi           BigInt?   @map("CODPDI")
+  dhInc            DateTime  @default(now()) @map("DHINC")
+  codUsuInc        BigInt?   @map("CODUSUINC")
+  dhAlt            DateTime  @updatedAt @map("DHALT")
+
+  tenant      Tenant                @relation(fields: [codTen], references: [codTen])
+  funcionario Funcionario           @relation(fields: [codFun], references: [codFun])
+  ciclo       CicloAvaliacao?       @relation(fields: [codCiclo], references: [codCiclo])
+  responsavel Usuario?              @relation("MetaResp", fields: [codUsuResp], references: [codUsu])
+  plano       PlanoDesenvolvimento? @relation(fields: [codPdi], references: [codPdi])
+  progressos  ProgressoMeta[]
+
+  @@index([codTen, codFun])
+  @@map("TGPMETA")
+}
+
+/// Atualização de progresso de uma meta (RN-GP-029) — a trilha imutável de como
+/// a meta andou, com evidência e comentário. A meta guarda o progresso atual;
+/// aqui fica o histórico de cada passo.
+model ProgressoMeta {
+  codMetaProg BigInt   @id @default(autoincrement()) @map("CODMETAPROG")
+  codTen      BigInt   @map("CODTEN")
+  codMeta     BigInt   @map("CODMETA")
+  progresso   Int      @map("PROGRESSO")
+  comentario  String?  @map("COMENTARIO") @db.Text
+  evidencia   String?  @map("EVIDENCIA")
+  dhInc       DateTime @default(now()) @map("DHINC")
+  codUsuInc   BigInt?  @map("CODUSUINC")
+
+  tenant Tenant @relation(fields: [codTen], references: [codTen])
+  meta   Meta   @relation(fields: [codMeta], references: [codMeta])
+
+  @@index([codTen, codMeta])
+  @@map("TGPMETAPROG")
 }
 
 /// Modelo de avaliação 360 com escopo (performance-360, RN-GP-025 / RN-GP-027).

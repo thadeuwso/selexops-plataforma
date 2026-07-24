@@ -23,7 +23,7 @@ export interface Colaborador360 {
     totalCompetencias: number;
     ciclo: { codCiclo: string; nome: string; dtInicio: string; dtFim: string; status: string };
   } | null;
-  resumo: { planosAtivos: number; acoesPendentes: number; feedbacks: number; feedbacksSemCiencia: number };
+  resumo: { planosAtivos: number; acoesPendentes: number; feedbacks: number; feedbacksSemCiencia: number; metasTotal: number; metasConcluidas: number; metasEmRisco: number; metasProgresso: number };
   aderencia: { score: number; nivel: "ADERENTE" | "ATENCAO" | "RISCO" };
 }
 

@@ -78,8 +78,13 @@ export function Visao360({ dados }: { dados: Colaborador360 }) {
 
         <Cartao titulo="Desenvolvimento">
           <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            <div>{dados.resumo.planosAtivos} plano(s) ativo(s)</div>
-            <div>{dados.resumo.acoesPendentes} ação(ões) pendente(s)</div>
+            <div>{dados.resumo.planosAtivos} plano(s) · {dados.resumo.acoesPendentes} ação(ões) pendente(s)</div>
+            <div>
+              Metas: {dados.resumo.metasConcluidas}/{dados.resumo.metasTotal} concluídas ({dados.resumo.metasProgresso}%)
+              {dados.resumo.metasEmRisco > 0 && (
+                <span style={{ color: "var(--feedback-danger, #b91c1c)" }}> · {dados.resumo.metasEmRisco} em risco/atraso</span>
+              )}
+            </div>
             <div>
               {dados.resumo.feedbacks} feedback(s)
               {dados.resumo.feedbacksSemCiencia > 0 && (
